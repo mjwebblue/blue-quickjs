@@ -447,7 +447,7 @@ Remove high-risk features excluded by Baseline #1 until explicitly supported/met
 ### T-015: Disable typed arrays / ArrayBuffer / DataView / WebAssembly exposure
 
 **Phase:** P1 – QuickJS harness and deterministic capability profile
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-011
 
 **Goal:**
@@ -457,12 +457,16 @@ Prevent float/NaN payload observability and low-level channels.
 
 **Detailed tasks:**
 
-- [ ] Disable/stub ArrayBuffer, DataView, typed arrays, WebAssembly.
-- [ ] Add tests confirming they are unreachable.
+- [x] Disable/stub ArrayBuffer, DataView, typed arrays, WebAssembly.
+- [x] Add tests confirming they are unreachable.
 
 **Acceptance criteria:**
 
-- [ ] These globals are absent/stubbed deterministically.
+- [x] These globals are absent/stubbed deterministically.
+
+**Current state (P1 T-015):**
+- Deterministic init installs TypeError stubs for `ArrayBuffer`, `SharedArrayBuffer`, `DataView`, all typed array constructors, `Atomics`, and `WebAssembly` so attempts to construct or call them fail with deterministic error strings.
+- Native harness tests assert deterministic failures for `ArrayBuffer`, `SharedArrayBuffer`, `DataView`, `Uint8Array`, `Atomics`, and `WebAssembly`.
 
 ---
 
