@@ -357,7 +357,7 @@ Centralize deterministic runtime/context initialization so native and wasm use t
 ### T-012: Disable time, randomness, timers, and locale channels
 
 **Phase:** P1 – QuickJS harness and deterministic capability profile
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-011
 
 **Goal:**
@@ -367,10 +367,10 @@ Remove nondeterminism sources: time/randomness/timers/locale.
 
 **Detailed tasks:**
 
-- [ ] Disable/stub: `Date`, timing APIs, timers.
-- [ ] Disable/stub `Math.random` (or remove entirely).
-- [ ] Ensure no locale-dependent APIs are exposed.
-- [ ] Add tests proving stable behavior.
+- [x] Disable/stub: `Date`, timing APIs, timers.
+- [x] Disable/stub `Math.random` (or remove entirely).
+- [x] Ensure no locale-dependent APIs are exposed.
+- [x] Add tests proving stable behavior.
 
 **Implementation hints (for Codex):**
 
@@ -378,7 +378,12 @@ Remove nondeterminism sources: time/randomness/timers/locale.
 
 **Acceptance criteria:**
 
-- [ ] Capability tests pass and show no time/random/locale leaks.
+- [x] Capability tests pass and show no time/random/locale leaks.
+
+**Current state (P1 T-012):**
+- Deterministic init seeds `random_state = 1` and replaces `Math.random` with a throwing stub (`TypeError: Math.random is disabled in deterministic mode`).
+- `Date` and timers (`setTimeout`) remain absent in the deterministic context; harness tests assert they are `undefined`.
+- Added native harness tests covering the disabled random, missing Date/timers; all harness tests pass.
 
 ---
 
