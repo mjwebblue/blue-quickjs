@@ -89,8 +89,8 @@ This repo ensures:
 ## Working set (first Codex pass)
 
 - [x] T-000: Finish workspace bootstrap (root scripts, engines policy, verify `pnpm nx graph`/`run-many`).
-- [ ] T-001: Add lint/format/.editorconfig/.gitignore and `pnpm format`/`pnpm lint`.
-- [ ] T-002: Scaffold empty libs/apps per proposed layout; wire minimal tests.
+- [x] T-001: Add lint/format/.editorconfig/.gitignore and repo lint workflow.
+- [ ] T-002: Scaffold empty libs/apps per proposed layout; wire minimal tests. (`quickjs-wasm` lib scaffolded)
 - [ ] T-005: Create doc stubs and link from README.
 - [ ] README: Replace Nx boilerplate with repo overview and doc links.
 
@@ -133,19 +133,22 @@ Create the Nx monorepo scaffold with pnpm workspaces, consistent TypeScript conf
 ### T-001: Establish repo-wide lint/format conventions
 
 **Phase:** P0 – Monorepo bootstrap and standards
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-000
 
 **Goal:**
 Standardize formatting and linting so Codex can make consistent changes across the repo.
 
+**Current state:**
+Repo-wide Prettier config/ignore, ESLint base ignores, `.editorconfig`, and root `pnpm lint` (with Prettier enforced via ESLint) are in place and passing. Format script removed; use `pnpm lint --fix` for formatting.
+
 **Detailed tasks:**
 
-- [ ] Add Prettier config and ignore files.
-- [ ] Add ESLint config for TypeScript projects.
-- [ ] Configure Nx lint targets for libs and apps.
-- [ ] Add `.editorconfig`, `.gitignore`.
-- [ ] Add root scripts: `pnpm format`, `pnpm lint`.
+- [x] Add Prettier config and ignore files.
+- [x] Add ESLint config for TypeScript projects.
+- [x] Configure Nx lint targets for libs and apps.
+- [x] Add `.editorconfig`, `.gitignore`.
+- [x] Add root scripts: `pnpm lint` (formatting via `pnpm lint --fix`).
 
 **Implementation hints (for Codex):**
 
@@ -154,8 +157,7 @@ Standardize formatting and linting so Codex can make consistent changes across t
 
 **Acceptance criteria:**
 
-- [ ] `pnpm format` runs successfully.
-- [ ] `pnpm lint` runs successfully.
+- [x] `pnpm lint` runs successfully.
 
 ---
 
@@ -167,6 +169,9 @@ Standardize formatting and linting so Codex can make consistent changes across t
 
 **Goal:**
 Create Nx projects for all major libs and smoke apps so later tickets can wire functionality incrementally.
+
+**Current state:**
+`quickjs-wasm` publishable library scaffolded; remaining libs/apps are pending.
 
 **Detailed tasks:**
 

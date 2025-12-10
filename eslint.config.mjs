@@ -1,11 +1,23 @@
 import nx from '@nx/eslint-plugin';
 
+const eslintPluginPrettierRecommended = (
+  await import('eslint-plugin-prettier/recommended')
+).default;
+
 export default [
   ...nx.configs['flat/base'],
   ...nx.configs['flat/typescript'],
   ...nx.configs['flat/javascript'],
   {
-    ignores: ['**/dist', '**/out-tsc'],
+    ignores: [
+      '**/dist',
+      '**/out-tsc',
+      '**/.nx/**',
+      '**/coverage/**',
+      '**/tmp/**',
+      '**/node_modules/**',
+      'vendor/**',
+    ],
   },
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
@@ -39,4 +51,5 @@ export default [
     // Override or add rules here
     rules: {},
   },
+  eslintPluginPrettierRecommended,
 ];

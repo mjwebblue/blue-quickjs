@@ -10,10 +10,10 @@
     "graph": "nx graph --file tmp/graph.html",
     "test": "nx run-many -t test",
     "build": "nx run-many -t build",
-    "typecheck": "nx run-many -t typecheck"
+    "typecheck": "nx run-many -t typecheck",
+    "lint": "nx run-many -t lint --all"
   },
   "private": true,
-  "dependencies": {},
   "devDependencies": {
     "@eslint/js": "^9.8.0",
     "@nx/eslint": "22.2.0",
@@ -29,12 +29,12 @@
     "@vitest/coverage-v8": "^4.0.0",
     "@vitest/ui": "^4.0.0",
     "eslint": "^9.8.0",
-    "eslint-config-prettier": "^10.0.0",
+    "eslint-plugin-prettier": "^5.5.4",
     "jiti": "2.4.2",
     "jsdom": "~22.1.0",
     "jsonc-eslint-parser": "^2.1.0",
     "nx": "22.2.0",
-    "prettier": "^2.6.2",
+    "prettier": "^3.2.5",
     "tslib": "^2.3.0",
     "typescript": "~5.9.2",
     "typescript-eslint": "^8.40.0",
