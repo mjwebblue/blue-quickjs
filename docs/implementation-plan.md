@@ -390,7 +390,7 @@ Remove nondeterminism sources: time/randomness/timers/locale.
 ### T-013: Disable async/Promises/job queue
 
 **Phase:** P1 – QuickJS harness and deterministic capability profile
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-011
 
 **Goal:**
@@ -400,13 +400,18 @@ Enforce no async behavior and no hidden scheduling.
 
 **Detailed tasks:**
 
-- [ ] Remove/disable Promise, async functions, microtask processing.
-- [ ] Ensure VM doesn’t run jobs implicitly after evaluation.
-- [ ] Add tests verifying `Promise` absent and no microtasks run.
+- [x] Remove/disable Promise, async functions, microtask processing.
+- [x] Ensure VM doesn’t run jobs implicitly after evaluation.
+- [x] Add tests verifying `Promise` absent and no microtasks run.
 
 **Acceptance criteria:**
 
-- [ ] Async features are unavailable or deterministically rejected.
+- [x] Async features are unavailable or deterministically rejected.
+
+**Current state (P1 T-013):**
+- Deterministic init overwrites the global `Promise` with a throwing stub (`TypeError: Promise is disabled in deterministic mode`) and keeps the runtime job queue unused.
+- Async functions compile but throw when invoked because they rely on the disabled `Promise`.
+- Harness tests assert `Promise` throws, async invocation errors, and `queueMicrotask` is absent; all pass.
 
 ---
 
