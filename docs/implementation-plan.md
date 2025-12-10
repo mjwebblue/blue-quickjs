@@ -78,24 +78,43 @@ This repo ensures:
 
 ---
 
+# Current repo snapshot (kickoff)
+
+* Nx 22.2 workspace scaffold exists with pnpm (`nx.json`, `tsconfig.base.json`, `package.json`, `pnpm-workspace.yaml`).
+* `pnpm-workspace.yaml` only includes `libs/*`; `libs/` is empty and no `apps/` projects exist yet.
+* `node_modules/` is present; no lint/format configs or root scripts yet; `README.md` is the default Nx placeholder.
+* Docs folder currently only has this plan; toolchain/docs stubs are missing.
+
+## Working set (first Codex pass)
+
+* [x] T-000: Finish workspace bootstrap (root scripts, engines policy, verify `pnpm nx graph`/`run-many`).
+* [ ] T-001: Add lint/format/.editorconfig/.gitignore and `pnpm format`/`pnpm lint`.
+* [ ] T-002: Scaffold empty libs/apps per proposed layout; wire minimal tests.
+* [ ] T-005: Create doc stubs and link from README.
+* [ ] README: Replace Nx boilerplate with repo overview and doc links.
+
+---
+
 # Phase P0 — Monorepo bootstrap and standards
 
 ### T-000: Initialize Nx workspace with pnpm
 
 **Phase:** P0 – Monorepo bootstrap and standards
-**Status:** TODO
+**Status:** DONE
 **Depends on:** None
 
 **Goal:**
 Create the Nx monorepo scaffold with pnpm workspaces, consistent TypeScript configuration, and a baseline build/test story.
 
+**Current state:** Nx workspace files configured (`nx.json`, `tsconfig.base.json`, `package.json`, `pnpm-workspace.yaml` with apps/libs/tools), engines policy + scripts added, .nvmrc pinned to Node 20.17.0; baseline Nx commands verified.
+
 **Detailed tasks:**
 
-* [ ] Initialize Nx workspace (integrated monorepo style) with TypeScript support.
-* [ ] Configure pnpm workspace (`pnpm-workspace.yaml`) and root `package.json` scripts.
-* [ ] Add Node engine version policy (`.nvmrc` and/or `package.json#engines`).
-* [ ] Add base `tsconfig.base.json` and workspace path aliases strategy.
-* [ ] Verify `pnpm nx graph` runs.
+* [x] Initialize Nx workspace (integrated monorepo style) with TypeScript support.
+* [x] Configure pnpm workspace (`pnpm-workspace.yaml`) and root `package.json` scripts.
+* [x] Add Node engine version policy (`.nvmrc` and `package.json#engines`).
+* [x] Add base `tsconfig.base.json` and workspace path aliases strategy.
+* [x] Verify `pnpm nx graph` runs.
 
 **Implementation hints (for Codex):**
 
@@ -104,9 +123,9 @@ Create the Nx monorepo scaffold with pnpm workspaces, consistent TypeScript conf
 
 **Acceptance criteria:**
 
-* [ ] `pnpm install` succeeds.
-* [ ] `pnpm nx graph` runs without errors.
-* [ ] `pnpm nx run-many -t test` runs (even if no projects exist yet).
+* [x] `pnpm install` succeeds.
+* [x] `pnpm nx graph` runs without errors.
+* [x] `pnpm nx run-many -t test` runs (even if no projects exist yet).
 
 ---
 

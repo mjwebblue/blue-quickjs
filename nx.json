@@ -5,6 +5,11 @@
     "production": ["default"],
     "sharedGlobals": ["{workspaceRoot}/.github/workflows/ci.yml"]
   },
+  "workspaceLayout": {
+    "appsDir": "apps",
+    "libsDir": "libs"
+  },
+  "packageManager": "pnpm",
   "nxCloudId": "69399ca4042e5835b3617d84",
   "plugins": [
     {

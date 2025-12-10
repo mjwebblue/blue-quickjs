@@ -2,7 +2,16 @@
   "name": "@blue-quickjs/source",
   "version": "0.0.0",
   "license": "MIT",
-  "scripts": {},
+  "engines": {
+    "node": ">=20.17.0"
+  },
+  "scripts": {
+    "nx": "nx",
+    "graph": "nx graph --file tmp/graph.html",
+    "test": "nx run-many -t test",
+    "build": "nx run-many -t build",
+    "typecheck": "nx run-many -t typecheck"
+  },
   "private": true,
   "dependencies": {},
   "devDependencies": {
