@@ -336,6 +336,7 @@ Centralize deterministic runtime/context initialization so native and wasm use t
 - [x] Ensure harness uses this init.
 
 **Current state (P1 T-011):**
+
 - Added `JS_NewDeterministicRuntime(JSRuntime **, JSContext **)` in the fork (`quickjs.c`/`quickjs.h`):
   - Initializes a context with base objects + JSON + Map/Set only; no Date/Proxy/RegExp/typed arrays/Promise/WeakRef/etc. yet.
   - Stubs `eval` and `Function` with deterministic `TypeError` messages and clears `ctx->eval_internal`.
@@ -381,6 +382,7 @@ Remove nondeterminism sources: time/randomness/timers/locale.
 - [x] Capability tests pass and show no time/random/locale leaks.
 
 **Current state (P1 T-012):**
+
 - Deterministic init seeds `random_state = 1` and replaces `Math.random` with a throwing stub (`TypeError: Math.random is disabled in deterministic mode`).
 - `Date` and timers (`setTimeout`) remain absent in the deterministic context; harness tests assert they are `undefined`.
 - Added native harness tests covering the disabled random, missing Date/timers; all harness tests pass.
@@ -409,6 +411,7 @@ Enforce no async behavior and no hidden scheduling.
 - [x] Async features are unavailable or deterministically rejected.
 
 **Current state (P1 T-013):**
+
 - Deterministic init overwrites the global `Promise` with a throwing stub (`TypeError: Promise is disabled in deterministic mode`) and keeps the runtime job queue unused.
 - Async functions compile but throw when invoked because they rely on the disabled `Promise`.
 - Harness tests assert `Promise` throws, async invocation errors, and `queueMicrotask` is absent; all pass.
@@ -438,6 +441,7 @@ Remove high-risk features excluded by Baseline #1 until explicitly supported/met
 - [x] Scripts attempting these features fail deterministically.
 
 **Current state (P1 T-014):**
+
 - Deterministic init continues to stub `eval`/`Function` and now replaces `RegExp` and `Proxy` globals with deterministic TypeError stubs.
 - `ctx->regexp_ctor` and `compile_regexp` point at the disabled stub, so both `new RegExp()` and regex literals throw `TypeError: RegExp is disabled in deterministic mode`.
 - Native harness tests cover the RegExp constructor, RegExp literals, and Proxy construction and assert deterministic failures.
@@ -465,6 +469,7 @@ Prevent float/NaN payload observability and low-level channels.
 - [x] These globals are absent/stubbed deterministically.
 
 **Current state (P1 T-015):**
+
 - Deterministic init installs TypeError stubs for `ArrayBuffer`, `SharedArrayBuffer`, `DataView`, all typed array constructors, `Atomics`, and `WebAssembly` so attempts to construct or call them fail with deterministic error strings.
 - Native harness tests assert deterministic failures for `ArrayBuffer`, `SharedArrayBuffer`, `DataView`, `Uint8Array`, `Atomics`, and `WebAssembly`.
 
@@ -492,6 +497,7 @@ Prevent nondeterministic host logging. Logging (if any) must be via deterministi
 - [x] No console output occurs from VM execution in harness tests.
 
 **Current state (P1 T-016):**
+
 - Deterministic init installs a null-prototype `console` with common methods (`log`, `info`, `warn`, `error`, `debug`) all mapped to deterministic `TypeError: console is disabled in deterministic mode`; global `print` is similarly stubbed.
 - Native harness tests assert console/print calls throw deterministically (no host output); future logging should go through `Host.v1.emit(...)` once implemented.
 
@@ -520,6 +526,7 @@ Lock down the deterministic profile with regression tests.
 - [x] Running the suite twice yields identical outputs.
 
 **Current state (P1 T-017):**
+
 - Added a capability snapshot assertion in the native harness that records deterministic outcomes for all disabled globals, confirms `Host`/`Host.v1` immutability/non-extensibility, and checks global property ordering for injected names; compared against a golden JSON output.
 - QuickJS deterministic init now prevents extensions on the `Host` namespaces to keep them immutable; harness suite passes deterministically.
 
@@ -530,7 +537,7 @@ Lock down the deterministic profile with regression tests.
 ### T-020: Add gas state to runtime/context
 
 **Phase:** P2 – Canonical gas metering inside QuickJS fork
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-010
 
 **Goal:**
@@ -540,20 +547,26 @@ Introduce canonical gas state and deterministic OOG errors.
 
 **Detailed tasks:**
 
-- [ ] Add gas fields: gas remaining, gas limit, schedule/version id.
-- [ ] Add charge/check helpers.
-- [ ] Define deterministic OOG error tag/code distinct from HostError.
+- [x] Add gas fields: gas remaining, gas limit, schedule/version id.
+- [x] Add charge/check helpers.
+- [x] Define deterministic OOG error tag/code distinct from HostError.
 
 **Acceptance criteria:**
 
-- [ ] Harness can trigger OOG deterministically by setting a low gas limit.
+- [x] Harness can trigger OOG deterministically by setting a low gas limit.
+
+**Current state (P2 T-020):**
+
+- `JSContext` now carries `gas_limit`, `gas_remaining`, and `gas_version` (default `JS_GAS_VERSION_LATEST`), initialized to `JS_GAS_UNLIMITED`.
+- Public helpers added: `JS_SetGasLimit`, `JS_GetGasLimit/Remaining`, `JS_GetGasVersion`, and `JS_UseGas` to precharge/charge and throw deterministic uncatchable `OutOfGas` (`code: "OOG"`, message `out of gas`).
+- Native harness accepts `--gas-limit` and tests assert the deterministic OOG error path.
 
 ---
 
 ### T-021: Implement opcode/bytecode metering in interpreter loop
 
 **Phase:** P2 – Canonical gas metering inside QuickJS fork
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-020
 
 **Goal:**
@@ -563,20 +576,25 @@ Charge gas per executed opcode using a versioned cost table.
 
 **Detailed tasks:**
 
-- [ ] Insert gas charge at opcode dispatch (charge-before-execute).
-- [ ] Define explicit opcode cost table in one file.
-- [ ] Add tests asserting exact gas used for small programs.
+- [x] Insert gas charge at opcode dispatch (charge-before-execute).
+- [x] Define explicit opcode cost table in one file.
+- [x] Add tests asserting exact gas used for small programs.
 
 **Acceptance criteria:**
 
-- [ ] Gas usage is stable across repeated runs.
+- [x] Gas usage is stable across repeated runs.
+
+**Current state (P2 T-021):**
+
+- Added per-opcode gas table (flat cost = 1 for now) in `quickjs.c` and charge-before-execute metering in the interpreter loop; direct-dispatch reworked to pass through the loop each opcode so gas is always charged.
+- Harness exposes `--report-gas` and verifies deterministic gas usage for constant and addition scripts plus OOG boundaries.
 
 ---
 
 ### T-022: Define deterministic OOG boundary semantics
 
 **Phase:** P2 – Canonical gas metering inside QuickJS fork
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-021
 
 **Goal:**
@@ -586,19 +604,25 @@ Ensure exact out-of-gas point is stable across environments.
 
 **Detailed tasks:**
 
-- [ ] Specify and implement OOG boundaries: opcode precharge, builtin loop checks, host-call boundaries (later).
-- [ ] Add tests that hit OOG at a known boundary and assert last successful observable state.
+- [x] Specify and implement OOG boundaries: opcode precharge, builtin loop checks, host-call boundaries (later).
+- [x] Add tests that hit OOG at a known boundary and assert last successful observable state.
 
 **Acceptance criteria:**
 
-- [ ] OOG boundary tests pass deterministically.
+- [x] OOG boundary tests pass deterministically.
+
+**Current state (P2 T-022):**
+
+- OOG is thrown on opcode precharge before any instruction executes; the exception is uncatchable and zeros remaining gas.
+- Native harness can snapshot a global property via `--dump-global` to observe progress even when execution OOGs.
+- Tests cover zero-gas precharge (no progress, `STATE undefined`) and a loop boundary where OOG after the third increment reports deterministic state (`used=54`, `STATE 3`).
 
 ---
 
 ### T-023: Meter C-builtins that loop in C (Array.map/filter/reduce)
 
 **Phase:** P2 – Canonical gas metering inside QuickJS fork
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-021
 
 **Goal:**
@@ -608,19 +632,24 @@ Prevent cheap bytecode / expensive builtin loops.
 
 **Detailed tasks:**
 
-- [ ] Add base + per-element charges + OOG checks in map/filter/reduce.
-- [ ] Add tests verifying linear scaling and deterministic OOG index.
+- [x] Add base + per-element charges + OOG checks in map/filter/reduce.
+- [x] Add tests verifying linear scaling and deterministic OOG index.
 
 **Acceptance criteria:**
 
-- [ ] OOG occurs at the same element index for a fixed gas budget.
+- [x] OOG occurs at the same element index for a fixed gas budget.
+
+**Current state (P2 T-023):**
+
+- Array/TypedArray map/filter/every/some/forEach/reduce/reduceRight precharge `JS_GAS_ARRAY_CB_BASE=5` on entry plus `JS_GAS_ARRAY_CB_PER_ELEMENT=2` before each element hits property lookup or callback, throwing uncatchable OOG deterministically.
+- Harness tests cover map scaling (1 element uses 28 gas vs 5 elements uses 64), and OOG boundaries that stop after the 4th element for map (limit 55), filter (limit 60), and reduce (limit 61) with `--dump-global` asserting the last processed index.
 
 ---
 
 ### T-024: Audit and meter/disable other heavy builtins
 
 **Phase:** P2 – Canonical gas metering inside QuickJS fork
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-017, T-021
 
 **Goal:**
@@ -630,13 +659,18 @@ Ensure no builtin performs unmetered large work.
 
 **Detailed tasks:**
 
-- [ ] Inventory heavy builtins (e.g., sort, JSON parse/stringify, string ops).
-- [ ] For each: meter deterministically or disable in profile.
-- [ ] Update docs and tests accordingly.
+- [x] Inventory heavy builtins (e.g., sort, JSON parse/stringify, string ops).
+- [x] For each: meter deterministically or disable in profile.
+- [x] Update docs and tests accordingly.
 
 **Acceptance criteria:**
 
-- [ ] At least 3 heavy builtin behaviors are covered by tests.
+- [x] At least 3 heavy builtin behaviors are covered by tests.
+
+**Current state (P2 T-024):**
+
+- Deterministic profile now replaces `JSON.parse`, `JSON.stringify`, and `Array.prototype.sort` with a disabled stub that throws `TypeError: <name> is disabled in deterministic mode`, preventing unmetered O(n) / O(n log n) native work.
+- Harness tests assert these three disabled behaviors to lock in the restriction.
 
 ---
 
@@ -726,6 +760,46 @@ Lock in gas semantics before wasm and host ABI.
 
 ---
 
+# Phase P2.5 — Early QuickJS-in-Wasm gas harness
+
+### T-029: Early QuickJS-in-Wasm gas harness (no host ABI)
+
+**Phase:** P2.5 – Early QuickJS-in-Wasm gas harness
+**Status:** TODO
+**Depends on:** T-022, T-004, T-003, T-002
+
+**Goal:**
+Produce a minimal Emscripten-built QuickJS-in-Wasm binary that exposes the canonical gas metering (P2) and validate that native vs Wasm have identical results and OOG boundaries for representative scripts, before introducing the host ABI.
+
+**Baseline references:** Baseline #1 §1A–§2B
+
+**Detailed tasks:**
+
+- [ ] Add a minimal `quickjs-wasm-build` Nx target (or reuse the existing empty one) that:
+  - [ ] compiles the current deterministic QuickJS fork with gas metering to Wasm using the pinned emsdk,
+  - [ ] exposes a simple C entrypoint equivalent to the native harness (`eval(code, gas_limit) -> { result, gas_used | OOG }`),
+  - [ ] emits `.wasm` (+ minimal JS glue if needed) into a stable `dist/` location for tests.
+
+- [ ] Add a tiny TS harness in `libs/test-harness` that:
+  - [ ] loads the Wasm in Node,
+  - [ ] runs a fixed set of gas-focused scripts (straight-line code, small loops, OOG boundary),
+  - [ ] compares `result`, `error code/tag`, and `gas_used` against the native harness.
+
+- [ ] Add a basic browser smoke page (or reuse `apps/smoke-web`) that:
+  - [ ] loads the same `.wasm` bytes,
+  - [ ] runs the same gas fixtures,
+  - [ ] reports the same outputs as the Node harness (no host calls).
+
+- [ ] Document any temporary limitations (e.g., no host ABI, no manifest, rough memory sizing) so P4 can harden the build later without changing P2 gas semantics.
+
+**Acceptance criteria:**
+
+- [ ] `pnpm nx build quickjs-wasm-build` produces a runnable `.wasm` artifact.
+- [ ] A `pnpm nx test` (or equivalent script) runs the native-vs-wasm gas fixtures in Node and asserts exact equality of `result`, `error code/tag`, and `gas_used`.
+- [ ] A manual or automated browser run of the same fixtures shows identical outcomes to the Node run.
+
+---
+
 # Phase P3 — Baseline #2 host ABI: DV + manifest + single dispatcher + Host.v1
 
 ### T-030: Decide and document canonical DV wire encoding
@@ -742,6 +816,7 @@ Pick one canonical encoding for DV used for args/returns and (preferably) manife
 **Detailed tasks:**
 
 - [ ] Evaluate candidate formats (canonical CBOR, JCS, custom minimal binary).
+
 - [ ] Choose one and fully specify it in `docs/dv-wire-format.md`:
   - [ ] type tags, lengths, UTF-8 handling,
   - [ ] numeric restrictions: finite, no NaN/Inf, no -0 (canonicalize),
@@ -874,6 +949,7 @@ Lock down the minimal host ABI surface required by the read-only evaluator.
   - [ ] Optional: `Host.v1.emit(value)` (EMIT) for deterministic logging/tape (recommended)
 
 - [ ] Define per-function limits and error codes (path invalid, not found, limit exceeded).
+
 - [ ] Define per-function gas schedule parameters (base, k_arg_bytes, k_out_bytes, k_units).
 
 **Acceptance criteria:**
@@ -949,6 +1025,7 @@ Add a single syscall path from VM to host with deterministic guardrails.
   - [ ] wasm build (imported function).
 
 - [ ] Add a reentrancy guard preventing nested host calls.
+
 - [ ] Add deterministic failures for oversized request/response.
 
 **Acceptance criteria:**
@@ -977,6 +1054,7 @@ Standardize host responses as `Ok(DV)` or `Err({code, tag, details?})` plus dete
   - [ ] optional metadata needed for charging/tape.
 
 - [ ] Implement parsing/validation in VM.
+
 - [ ] Implement deterministic error throwing: `HostError` with stable `{code, tag}`.
 
 **Acceptance criteria:**
@@ -1000,6 +1078,7 @@ Expose host functions in JS as `Host.v1.*`, generated from manifest entries (js_
 **Detailed tasks:**
 
 - [ ] Parse manifest entries and install nested namespace objects (null prototype).
+
 - [ ] For each entry, create a JS wrapper that:
   - [ ] validates args by `arg_schema`,
   - [ ] DV-encodes args,
@@ -1097,7 +1176,7 @@ Provide deterministic audit traces (request/response hashes, fn_id, gas breakdow
 
 **Phase:** P4 – Emscripten build and deterministic artifacts
 **Status:** TODO
-**Depends on:** T-003, T-004, T-002
+**Depends on:** T-003, T-004, T-002, T-029
 
 **Goal:**
 Compile the forked QuickJS to Wasm using pinned Emscripten.
