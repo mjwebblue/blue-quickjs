@@ -799,30 +799,34 @@ Produce a minimal Emscripten-built QuickJS-in-Wasm binary that exposes the canon
 
 **Baseline references:** Baseline #1 §1A–§2B
 
-**Detailed tasks:**
+**Detailed tasks (split into smaller subtasks):**
 
-- [ ] Add a minimal `quickjs-wasm-build` Nx target (or reuse the existing empty one) that:
-  - [ ] compiles the current deterministic QuickJS fork with gas metering to Wasm using the pinned emsdk,
-  - [ ] exposes a simple C entrypoint equivalent to the native harness (`eval(code, gas_limit) -> { result, gas_used | OOG }`),
-  - [ ] emits `.wasm` (+ minimal JS glue if needed) into a stable `dist/` location for tests.
+- [ ] **Subtask A – Minimal `quickjs-wasm-build` Nx target**
+  - [ ] Add or wire up a `quickjs-wasm-build` Nx project (reusing the existing empty one if present) that compiles the current deterministic QuickJS fork with gas metering to Wasm using the pinned emsdk.
+  - [ ] Expose a simple C entrypoint equivalent to the native harness: `eval(code, gas_limit) -> { result, gas_used | OOG }`.
+  - [ ] Emit the `.wasm` artifact (plus minimal JS glue if needed) into a stable, deterministic `dist/` location that downstream tests can consume.
 
-- [ ] Add a tiny TS harness in `libs/test-harness` that:
-  - [ ] loads the Wasm in Node,
-  - [ ] runs a fixed set of gas-focused scripts (straight-line code, small loops, OOG boundary),
-  - [ ] compares `result`, `error code/tag`, and `gas_used` against the native harness.
+- [ ] **Subtask B – Node gas-equivalence harness**
+  - [ ] Add a tiny TS harness in `libs/test-harness` that loads the Wasm in Node.
+  - [ ] Run a fixed set of gas-focused scripts (straight-line code, small loops, OOG boundary), ideally reusing the existing gas fixtures where possible.
+  - [ ] Compare `result`, `error code/tag`, and `gas_used` from the Wasm harness against the native harness, failing tests on any mismatch.
+  - [ ] Wire this into `pnpm nx test` (or an equivalent script) so it runs in CI.
 
-- [ ] Add a basic browser smoke page (or reuse `apps/smoke-web`) that:
-  - [ ] loads the same `.wasm` bytes,
-  - [ ] runs the same gas fixtures,
-  - [ ] reports the same outputs as the Node harness (no host calls).
+- [ ] **Subtask C – Browser gas smoke page**
+  - [ ] Add a basic browser smoke page (or reuse `apps/smoke-web`) that loads the same `.wasm` bytes as the Node harness.
+  - [ ] Run the same gas fixtures in the browser (no host ABI calls).
+  - [ ] Surface a simple report (e.g., list of cases with OK/FAIL) and log mismatches to the console for debugging.
 
-- [ ] Document any temporary limitations (e.g., no host ABI, no manifest, rough memory sizing) so P4 can harden the build later without changing P2 gas semantics.
+- [ ] **Subtask D – Document temporary limitations**
+  - [ ] Document any temporary limitations of this early harness (e.g., no host ABI, no manifest, rough memory sizing, any non-final Emscripten flags) so that P4 can harden the build later without changing P2 gas semantics.
+  - [ ] Clearly call out which aspects (e.g., gas schedule, OOG boundaries) are treated as stable contracts versus which are explicitly “pre-P4” and allowed to evolve.
 
-**Acceptance criteria:**
+**Acceptance criteria (per subtask):**
 
-- [ ] `pnpm nx build quickjs-wasm-build` produces a runnable `.wasm` artifact.
-- [ ] A `pnpm nx test` (or equivalent script) runs the native-vs-wasm gas fixtures in Node and asserts exact equality of `result`, `error code/tag`, and `gas_used`.
-- [ ] A manual or automated browser run of the same fixtures shows identical outcomes to the Node run.
+- [ ] **Subtask A:** `pnpm nx build quickjs-wasm-build` produces a runnable `.wasm` artifact that exposes `eval(code, gas_limit) -> { result, gas_used | OOG }` and is written to a stable `dist/` path.
+- [ ] **Subtask B:** A `pnpm nx test` (or equivalent script) runs the native-vs-wasm gas fixtures in Node and asserts exact equality of `result`, `error code/tag`, and `gas_used`.
+- [ ] **Subtask C:** A manual or automated browser run of the same fixtures shows identical outcomes to the Node run (for the selected scripts and gas limits).
+- [ ] **Subtask D:** A short, checked-in document (or updated section of this plan) describes the temporary limitations and P4 hardening expectations without leaving ambiguity about what must remain stable.
 
 ---
 
