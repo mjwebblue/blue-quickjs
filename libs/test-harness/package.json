@@ -19,7 +19,11 @@
     "!**/*.tsbuildinfo"
   ],
   "nx": {
-    "name": "test-harness"
+    "name": "test-harness",
+    "implicitDependencies": [
+      "quickjs-native-harness",
+      "quickjs-wasm-build"
+    ]
   },
   "dependencies": {
     "tslib": "^2.3.0"

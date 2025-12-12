@@ -52,6 +52,7 @@ EMCC_FLAGS=(
   -sNO_EXIT_RUNTIME=1
   -sINITIAL_MEMORY=33554432
   -sALLOW_MEMORY_GROWTH=0
+  -sMEMORY64=1
   -sSTACK_SIZE=1048576
   -sEXPORT_NAME=QuickJSGasWasm
   "-sEXPORTED_FUNCTIONS=['_qjs_eval','_qjs_free_output','_malloc','_free']"

@@ -806,11 +806,11 @@ Produce a minimal Emscripten-built QuickJS-in-Wasm binary that exposes the canon
   - [x] Expose a simple C entrypoint equivalent to the native harness: `eval(code, gas_limit) -> { result, gas_used | OOG }`.
   - [x] Emit the `.wasm` artifact (plus minimal JS glue if needed) into a stable, deterministic `dist/` location that downstream tests can consume.
 
-- [ ] **Subtask B – Node gas-equivalence harness**
-  - [ ] Add a tiny TS harness in `libs/test-harness` that loads the Wasm in Node.
-  - [ ] Run a fixed set of gas-focused scripts (straight-line code, small loops, OOG boundary), ideally reusing the existing gas fixtures where possible.
-  - [ ] Compare `result`, `error code/tag`, and `gas_used` from the Wasm harness against the native harness, failing tests on any mismatch.
-  - [ ] Wire this into `pnpm nx test` (or an equivalent script) so it runs in CI.
+- [x] **Subtask B – Node gas-equivalence harness**
+  - [x] Add a tiny TS harness in `libs/test-harness` that loads the Wasm in Node.
+  - [x] Run a fixed set of gas-focused scripts (straight-line code, small loops, OOG boundary), ideally reusing the existing gas fixtures where possible.
+  - [x] Compare `result`, `error code/tag`, and `gas_used` from the Wasm harness against the native harness, failing tests on any mismatch.
+  - [x] Wire this into `pnpm nx test` (or an equivalent script) so it runs in CI.
 
 - [ ] **Subtask C – Browser gas smoke page**
   - [ ] Add a basic browser smoke page (or reuse `apps/smoke-web`) that loads the same `.wasm` bytes as the Node harness.
@@ -824,7 +824,7 @@ Produce a minimal Emscripten-built QuickJS-in-Wasm binary that exposes the canon
 **Acceptance criteria (per subtask):**
 
 - [x] **Subtask A:** `pnpm nx build quickjs-wasm-build` produces a runnable `.wasm` artifact that exposes `eval(code, gas_limit) -> { result, gas_used | OOG }` and is written to a stable `dist/` path.
-- [ ] **Subtask B:** A `pnpm nx test` (or equivalent script) runs the native-vs-wasm gas fixtures in Node and asserts exact equality of `result`, `error code/tag`, and `gas_used`.
+- [x] **Subtask B:** A `pnpm nx test` (or equivalent script) runs the native-vs-wasm gas fixtures in Node and asserts exact equality of `result`, `error code/tag`, and `gas_used`.
 - [ ] **Subtask C:** A manual or automated browser run of the same fixtures shows identical outcomes to the Node run (for the selected scripts and gas limits).
 - [ ] **Subtask D:** A short, checked-in document (or updated section of this plan) describes the temporary limitations and P4 hardening expectations without leaving ambiguity about what must remain stable.
 
@@ -833,6 +833,12 @@ Produce a minimal Emscripten-built QuickJS-in-Wasm binary that exposes the canon
 - `pnpm nx build quickjs-wasm-build` now calls an emscripten build script (pinned 3.1.56) that compiles the deterministic QuickJS fork + a wasm harness to `libs/quickjs-wasm-build/dist/quickjs-eval.{js,wasm}` (alongside the TS outputs in the same folder).
 - The harness exports `qjs_eval(code, gas_limit)` and `qjs_free_output(ptr)`; `qjs_eval` mirrors the native harness formatting (`RESULT … GAS …` / `ERROR … GAS …`) and runs deterministic GC checkpoints around evaluation.
 - The JS glue is an ES module (`QuickJSGasWasm` factory) with runtime methods exported for `cwrap`/`UTF8ToString`; artifact paths are surfaced via `getQuickjsWasmArtifacts()` in `libs/quickjs-wasm-build`.
+
+**Current state (P2.5 T-029 Subtask B):**
+
+- The vitest spec at `libs/test-harness/src/lib/gas-equivalence.spec.ts` now covers the full gas golden set (`zero-precharge`, `gc-checkpoint-budget`, `loop-oog`, `constant`, `addition`, `string-repeat`) against both the native harness binary and the wasm module, asserting parity on kind/message/gas remaining/used.
+- The wasm build uses Emscripten `-sMEMORY64=1`, so allocator layouts match native. The loader calls `cwrap('qjs_eval', 'bigint', ['string', 'bigint'])` (no 64-bit splitting) and frees the returned pointer via the BigInt wrapper.
+- **Compatibility note:** Wasm memory64 was used to close the remaining parity gap because it aligns allocator layouts with native, but `-sMEMORY64` is still experimental and not widely available in browsers/worker runtimes. We removed the earlier wasm32-only canonical allocation padding helper (it did not affect parity because Emscripten’s allocator was already 16-byte aligned), so wasm32 parity still needs a portable adjustment if memory64 cannot be shipped. The default shipping artifact should remain wasm32 for portability; memory64 builds can stay as an internal/debug variant until target environments confirm support. Building native as 32-bit is impractical on macOS/arm64 and requires a dedicated i386 userspace + multilib toolchain even on x86 Linux (e.g., a 32-bit Docker base); this should not be relied on for parity.
 
 ---
 
