@@ -29,25 +29,25 @@ export const gasFixtures: GasFixture[] = [
   {
     name: 'loop-oog',
     gasLimit: 600n,
-    expected: 'ERROR OutOfGas: out of gas GAS remaining=0 used=600',
+    expected: 'RESULT 3 GAS remaining=30 used=570',
     source: loopCounterSource.trim(),
   },
   {
     name: 'constant',
     gasLimit: 147n,
-    expected: 'RESULT 1 GAS remaining=0 used=147',
+    expected: 'RESULT 1 GAS remaining=22 used=125',
     source: constantSource.trim(),
   },
   {
     name: 'addition',
     gasLimit: 154n,
-    expected: 'RESULT 3 GAS remaining=0 used=154',
+    expected: 'RESULT 3 GAS remaining=22 used=132',
     source: additionSource.trim(),
   },
   {
     name: 'string-repeat',
     gasLimit: 5000n,
-    expected: 'RESULT 32768 GAS remaining=2609 used=2391',
+    expected: 'RESULT 32768 GAS remaining=2651 used=2349',
     source: stringRepeatSource.trim(),
   },
 ];

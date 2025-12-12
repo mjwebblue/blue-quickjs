@@ -54,11 +54,11 @@ function resultsMatch(actual: HarnessResult, expected: HarnessResult): boolean {
 
 async function createWasmRunner() {
   const module = await QuickJSGasWasm();
-  const evalFn = module.cwrap('qjs_eval', 'bigint', ['string', 'bigint']);
-  const freeFn = module.cwrap('qjs_free_output', null, ['bigint']);
+  const evalFn = module.cwrap('qjs_eval', 'number', ['string', 'bigint']);
+  const freeFn = module.cwrap('qjs_free_output', null, ['number']);
   return (code: string, gasLimit: bigint) => {
     const ptr = evalFn(code, gasLimit);
-    const output = module.UTF8ToString(Number(ptr));
+    const output = module.UTF8ToString(ptr);
     freeFn(ptr);
     return output.trim();
   };
@@ -210,7 +210,7 @@ export class AppElement extends HTMLElement {
           <h1>QuickJS wasm gas fixtures (browser)</h1>
           <p class="lede">
             Loads the deterministic QuickJS wasm harness in-browser and checks the gas
-            outputs against the native goldens used in the Node parity suite. Mismatches
+            outputs against the wasm32 baselines shared with the Node harness. Mismatches
             are logged to the console for debugging.
           </p>
           <div class="controls">

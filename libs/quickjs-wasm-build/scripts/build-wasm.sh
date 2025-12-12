@@ -6,6 +6,7 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../../.." && pwd)"
 PROJECT_ROOT="${REPO_ROOT}/libs/quickjs-wasm-build"
 QJS_DIR="${REPO_ROOT}/vendor/quickjs"
 OUT_DIR="${PROJECT_ROOT}/dist"
+VARIANTS_RAW="${WASM_VARIANTS:-wasm32}"
 
 ENV_SCRIPT="${REPO_ROOT}/tools/emsdk/emsdk_env.sh"
 if [[ ! -f "${ENV_SCRIPT}" ]]; then
@@ -33,7 +34,7 @@ SRC_FILES=(
   "${PROJECT_ROOT}/src/wasm/quickjs_wasm.c"
 )
 
-EMCC_FLAGS=(
+COMMON_EMCC_FLAGS=(
   -std=gnu11
   -O2
   -Wall
@@ -52,9 +53,9 @@ EMCC_FLAGS=(
   -sNO_EXIT_RUNTIME=1
   -sINITIAL_MEMORY=33554432
   -sALLOW_MEMORY_GROWTH=0
-  -sMEMORY64=1
   -sSTACK_SIZE=1048576
   -sEXPORT_NAME=QuickJSGasWasm
+  -sWASM_BIGINT=1
   "-sEXPORTED_FUNCTIONS=['_qjs_eval','_qjs_free_output','_malloc','_free']"
   "-sEXPORTED_RUNTIME_METHODS=['cwrap','ccall','UTF8ToString','lengthBytesUTF8']"
 )
@@ -62,8 +63,36 @@ EMCC_FLAGS=(
 rm -rf "${OUT_DIR}"
 mkdir -p "${OUT_DIR}"
 
-emcc "${SRC_FILES[@]}" "${EMCC_FLAGS[@]}" -o "${OUT_DIR}/quickjs-eval.js"
+IFS=',' read -ra REQUESTED_VARIANTS <<< "${VARIANTS_RAW// /,}"
+if [[ ${#REQUESTED_VARIANTS[@]} -eq 0 ]]; then
+  REQUESTED_VARIANTS=("wasm32")
+fi
 
-echo "Built QuickJS wasm harness:"
-echo "  JS:   ${OUT_DIR}/quickjs-eval.js"
-echo "  Wasm: ${OUT_DIR}/quickjs-eval.wasm"
+for variant in "${REQUESTED_VARIANTS[@]}"; do
+  normalized_variant="$(echo "${variant}" | tr '[:upper:]' '[:lower:]')"
+  suffix=""
+  declare -a variant_flags=()
+  emcc_args=("${SRC_FILES[@]}" "${COMMON_EMCC_FLAGS[@]}")
+
+  case "${normalized_variant}" in
+    wasm32)
+      suffix=""
+      ;;
+    wasm64 | memory64 | mem64)
+      suffix="-wasm64"
+      variant_flags+=(-sMEMORY64=1)
+      normalized_variant="wasm64"
+      emcc_args+=("${variant_flags[@]}")
+      ;;
+    *)
+      echo "Unknown WASM variant '${variant}'. Expected wasm32 or wasm64." >&2
+      exit 1
+      ;;
+  esac
+
+  emcc "${emcc_args[@]}" -o "${OUT_DIR}/quickjs-eval${suffix}.js"
+
+  echo "Built QuickJS wasm harness (${normalized_variant}):"
+  echo "  JS:   ${OUT_DIR}/quickjs-eval${suffix}.js"
+  echo "  Wasm: ${OUT_DIR}/quickjs-eval${suffix}.wasm"
+done

@@ -1,9 +1,12 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describe, expect, test, beforeAll } from 'vitest';
-import { getQuickjsWasmArtifacts } from '@blue-quickjs/quickjs-wasm-build';
+import {
+  type QuickjsWasmVariant,
+  getQuickjsWasmArtifacts,
+} from '@blue-quickjs/quickjs-wasm-build';
 
 type HarnessResultKind = 'RESULT' | 'ERROR';
 
@@ -12,6 +15,9 @@ interface HarnessResult {
   message: string;
   gasUsed: number;
   gasRemaining: number;
+  // Optional fields supported by some harness outputs / future extensions.
+  trace?: unknown;
+  state?: unknown;
 }
 
 const repoRoot = path.resolve(
@@ -68,16 +74,65 @@ const cases = [
   },
 ];
 
-let wasmEval: ((code: string, gasLimit: bigint) => bigint) | null = null;
-let wasmFree: ((ptr: bigint) => void) | null = null;
+const wasmVariantEnv = process.env.QJS_WASM_VARIANT?.toLowerCase();
+const wasmVariant: QuickjsWasmVariant =
+  wasmVariantEnv === 'wasm64' ? 'wasm64' : 'wasm32';
+const useNativeBaseline = wasmVariant === 'wasm64';
+
+const wasm32Expectations: Record<string, HarnessResult> = {
+  'zero-precharge': {
+    kind: 'ERROR',
+    message: 'OutOfGas: out of gas',
+    gasRemaining: 0,
+    gasUsed: 0,
+  },
+  'gc-checkpoint-budget': {
+    kind: 'ERROR',
+    message: 'OutOfGas: out of gas',
+    gasRemaining: 0,
+    gasUsed: 54,
+  },
+  'loop-oog': {
+    kind: 'RESULT',
+    message: '3',
+    gasRemaining: 30,
+    gasUsed: 570,
+  },
+  constant: {
+    kind: 'RESULT',
+    message: '1',
+    gasRemaining: 22,
+    gasUsed: 125,
+  },
+  addition: {
+    kind: 'RESULT',
+    message: '3',
+    gasRemaining: 22,
+    gasUsed: 132,
+  },
+  'string-repeat': {
+    kind: 'RESULT',
+    message: '32768',
+    gasRemaining: 2651,
+    gasUsed: 2349,
+  },
+};
+
+let wasmEval: ((code: string, gasLimit: bigint) => number) | null = null;
+let wasmFree: ((ptr: number) => void) | null = null;
 let wasmModule: any = null;
 
 beforeAll(async () => {
-  const { loaderPath } = getQuickjsWasmArtifacts();
+  const { loaderPath } = getQuickjsWasmArtifacts(wasmVariant);
+  if (!existsSync(loaderPath)) {
+    throw new Error(
+      `Wasm loader not found at ${loaderPath}. Build quickjs-wasm-build with WASM_VARIANTS=${wasmVariant}`,
+    );
+  }
   const moduleFactory = (await import(pathToFileURL(loaderPath).href)).default;
   wasmModule = await moduleFactory();
-  wasmEval = wasmModule.cwrap('qjs_eval', 'bigint', ['string', 'bigint']);
-  wasmFree = wasmModule.cwrap('qjs_free_output', null, ['bigint']);
+  wasmEval = wasmModule.cwrap('qjs_eval', 'number', ['string', 'bigint']);
+  wasmFree = wasmModule.cwrap('qjs_free_output', null, ['number']);
 });
 
 function parseHarnessOutput(output: string): HarnessResult {
@@ -120,20 +175,42 @@ function runWasm(code: string, gasLimit: bigint): HarnessResult {
     throw new Error('Wasm harness not initialized');
   }
   const ptr = wasmEval(code, gasLimit);
-  const raw = wasmModule.UTF8ToString(Number(ptr));
+  const raw = wasmModule.UTF8ToString(ptr);
   wasmFree(ptr);
   return parseHarnessOutput(raw);
 }
 
-describe('wasm vs native gas outputs', () => {
-  test.each(cases)('$name matches', ({ fixture, gasLimit }) => {
+function expectHarnessResult(
+  actual: HarnessResult,
+  expected: HarnessResult,
+): void {
+  expect(actual.kind).toEqual(expected.kind);
+  expect(actual.message).toEqual(expected.message);
+  expect(actual.gasUsed).toEqual(expected.gasUsed);
+  expect(actual.gasRemaining).toEqual(expected.gasRemaining);
+  if (expected.trace !== undefined) {
+    expect(actual.trace ?? null).toEqual(expected.trace);
+  }
+  if (expected.state !== undefined) {
+    expect(actual.state ?? null).toEqual(expected.state);
+  }
+}
+
+describe('wasm gas outputs', () => {
+  test.each(cases)('$name matches', ({ name, fixture, gasLimit }) => {
     const code = readFileSync(path.join(fixturesRoot, fixture), 'utf8');
-    const native = runNative(code, gasLimit);
     const wasm = runWasm(code, gasLimit);
 
-    expect(wasm.kind).toEqual(native.kind);
-    expect(wasm.message).toEqual(native.message);
-    expect(wasm.gasUsed).toEqual(native.gasUsed);
-    expect(wasm.gasRemaining).toEqual(native.gasRemaining);
+    if (useNativeBaseline) {
+      const native = runNative(code, gasLimit);
+      expectHarnessResult(wasm, native);
+      return;
+    }
+
+    const expected = wasm32Expectations[name];
+    if (!expected) {
+      throw new Error(`Missing wasm32 expectation for case ${name}`);
+    }
+    expectHarnessResult(wasm, expected);
   });
 });

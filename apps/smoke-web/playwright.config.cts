@@ -9,9 +9,6 @@ export default defineConfig({
   use: {
     headless: true,
     baseURL: 'http://localhost:4300',
-    launchOptions: {
-      args: ['--js-flags=--experimental-wasm-memory64'],
-    },
   },
   webServer: {
     command: 'pnpm vite --host --port 4300 --config vite.config.mts',
