@@ -94,8 +94,8 @@ This example covers the minimal read-only surface required by the evaluator. Gas
       "limits": { "max_request_bytes": 4096, "max_response_bytes": 262144, "max_units": 1000, "arg_utf8_max": [2048] },
       "error_codes": [
         { "code": "INVALID_PATH", "tag": "host/invalid_path" },
-        { "code": "NOT_FOUND", "tag": "host/not_found" },
-        { "code": "LIMIT_EXCEEDED", "tag": "host/limit" }
+        { "code": "LIMIT_EXCEEDED", "tag": "host/limit" },
+        { "code": "NOT_FOUND", "tag": "host/not_found" }
       ]
     },
     {
@@ -109,8 +109,8 @@ This example covers the minimal read-only surface required by the evaluator. Gas
       "limits": { "max_request_bytes": 4096, "max_response_bytes": 262144, "max_units": 1000, "arg_utf8_max": [2048] },
       "error_codes": [
         { "code": "INVALID_PATH", "tag": "host/invalid_path" },
-        { "code": "NOT_FOUND", "tag": "host/not_found" },
-        { "code": "LIMIT_EXCEEDED", "tag": "host/limit" }
+        { "code": "LIMIT_EXCEEDED", "tag": "host/limit" },
+        { "code": "NOT_FOUND", "tag": "host/not_found" }
       ]
     },
     {
@@ -134,9 +134,9 @@ When canonically DV-encoded, these bytes are hashed with SHA-256 to produce the 
 
 ## Validation expectations (VM + tooling)
 
-- Reject manifests that include unknown keys, out-of-range integers, unsorted `functions`/`error_codes`, or duplicate `fn_id`/`code`.
+- Reject manifests that include unknown keys, out-of-range integers (including `-0`), unsorted `functions`/`error_codes`, or duplicate `fn_id`/`code`.
 - Reject `js_path` collisions: no two entries may share the same `js_path`, and no `js_path` may be a prefix of another.
-- Enforce `arity === arg_schema.length` and (if present) `arg_utf8_max.length === arity`.
+ - Enforce `arity === arg_schema.length` and (if present) `arg_utf8_max.length === arity`; if provided, `arg_utf8_max[i]` requires `arg_schema[i].type` to be `"string"`. Because `arg_utf8_max` must cover every argument, manifests may only include it when **all** arguments are strings.
 - `max_request_bytes`/`max_response_bytes` MUST be <= DV global max (1 MiB encoded) and non-zero; they apply to the fully encoded request array / response envelope bytes.
 - Gas parameters must be non-negative integers; schedules referenced by `schedule_id` must exist in the gas schedule doc/code. Gas arithmetic MUST be performed with explicit overflow checks (e.g., 64-bit intermediates); overflow during manifest validation invalidates the manifest.
 - `error_codes` is a set of allowed host error variants represented as an array sorted by `code` for canonical encoding.

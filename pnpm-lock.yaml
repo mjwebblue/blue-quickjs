@@ -113,9 +113,18 @@ importers:
 
   libs/abi-manifest:
     dependencies:
+      '@blue-quickjs/dv':
+        specifier: workspace:*
+        version: link:../dv
+      '@noble/hashes':
+        specifier: ^1.5.0
+        version: 1.8.0
       tslib:
         specifier: ^2.3.0
         version: 2.8.1
+      vitest:
+        specifier: ^4.0.0
+        version: 4.0.15(@types/node@20.19.9)(@vitest/ui@4.0.15)(jiti@2.4.2)(jsdom@22.1.0)(terser@5.44.1)(yaml@2.8.2)
 
   libs/dv:
     dependencies:
@@ -967,6 +976,10 @@ packages:
 
   '@napi-rs/wasm-runtime@0.2.4':
     resolution: {integrity: sha512-9zESzOO5aDByvhIAsOy9TbpZ0Ur2AJbUI7UT73kcUTS2mxAMHOBaa1st/jAymNoCtvrit99kkzT1FZuXVcgfIQ==}
+
+  '@noble/hashes@1.8.0':
+    resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
+    engines: {node: ^14.21.3 || >=16}
 
   '@nx/devkit@22.2.2':
     resolution: {integrity: sha512-oUe+I++Od90Rw168iQrCGD603EHEt8DVi/yQ5VEcUjuuZae3PO1gUIhH8jn67FJ9+6SgRu8mbdDi09VHgPBecQ==}
@@ -5036,6 +5049,8 @@ snapshots:
       '@emnapi/core': 1.7.1
       '@emnapi/runtime': 1.7.1
       '@tybys/wasm-util': 0.9.0
+
+  '@noble/hashes@1.8.0': {}
 
   '@nx/devkit@22.2.2(nx@22.2.2(@swc-node/register@1.9.2(@swc/core@1.5.29(@swc/helpers@0.5.17))(@swc/types@0.1.25)(typescript@5.9.3))(@swc/core@1.5.29(@swc/helpers@0.5.17)))':
     dependencies:

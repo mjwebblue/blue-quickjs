@@ -22,6 +22,9 @@
     "name": "abi-manifest"
   },
   "dependencies": {
-    "tslib": "^2.3.0"
+    "@blue-quickjs/dv": "workspace:*",
+    "@noble/hashes": "^1.5.0",
+    "tslib": "^2.3.0",
+    "vitest": "^4.0.0"
   }
 }

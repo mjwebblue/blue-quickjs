@@ -980,7 +980,7 @@ Define manifest schema, canonical bytes, and hashing rules.
 ### T-034: Implement manifest tooling in TypeScript (`libs/abi-manifest`)
 
 **Phase:** P3 – Host ABI (DV + manifest + syscall)
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-031, T-033
 
 **Goal:**
@@ -990,14 +990,19 @@ Provide TS tools to create canonical manifest bytes and compute `abi_manifest_ha
 
 **Detailed tasks:**
 
-- [ ] Implement manifest types + validators.
-- [ ] Implement canonical serialization to bytes.
-- [ ] Implement hashing function (same as VM).
-- [ ] Add tests asserting stable bytes and hash for a fixture manifest.
+- [x] Implement manifest types + validators.
+- [x] Implement canonical serialization to bytes.
+- [x] Implement hashing function (same as VM).
+- [x] Add tests asserting stable bytes and hash for a fixture manifest.
 
 **Acceptance criteria:**
 
-- [ ] `pnpm nx test abi-manifest` passes with stable fixture hashes.
+- [x] `pnpm nx test abi-manifest` passes with stable fixture hashes.
+
+**Current state (P3 T-034):**
+
+- `libs/abi-manifest` now exposes manifest types, strict validators (uint32 bounds, js_path collision/prefix detection, sorted fn_ids/error_codes, arg_utf8_max checks, DV size limits), canonical DV serialization, and SHA-256 hashing helpers (`hashAbiManifest`, `hashAbiManifestBytes`).
+- Tests include the Host.v1 fixture manifest, pin its canonical bytes/hash, and negative coverage for unsorted functions, path conflicts, and invalid arg_utf8_max; `pnpm nx test abi-manifest` passes.
 
 ---
 
