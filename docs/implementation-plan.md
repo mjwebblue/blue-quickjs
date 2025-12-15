@@ -890,7 +890,7 @@ Pick one canonical encoding for DV used for args/returns and (preferably) manife
 ### T-031: Implement DV encode/decode in TypeScript (`libs/dv`)
 
 **Phase:** P3 – Host ABI (DV + manifest + syscall)
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-030, T-002
 
 **Goal:**
@@ -900,14 +900,19 @@ Provide TS reference implementation for DV validation and canonical encode/decod
 
 **Detailed tasks:**
 
-- [ ] Define DV TS types and runtime validators.
-- [ ] Implement canonical encode/decode per spec.
-- [ ] Enforce numeric/string/object rules and limits.
-- [ ] Add property-based tests for roundtrip and canonicalization.
+- [x] Define DV TS types and runtime validators.
+- [x] Implement canonical encode/decode per spec.
+- [x] Enforce numeric/string/object rules and limits.
+- [x] Add property-based tests for roundtrip and canonicalization.
 
 **Acceptance criteria:**
 
-- [ ] `pnpm nx test dv` passes; includes non-canonical input tests.
+- [x] `pnpm nx test dv` passes; includes non-canonical input tests.
+
+**Current state (P3 T-031):**
+
+- `libs/dv` now exports DV types, limits, validators, and canonical CBOR subset encode/decode with strict rejection of non-canonical encodings, invalid UTF-8, and out-of-range numbers; limits match `docs/dv-wire-format.md`.
+- Property-based tests plus targeted fixtures cover canonical examples, forbidden encodings (float width/float64 integers, map key ordering/duplicates, MIN_SAFE_INTEGER–1), and UTF-8/surrogate handling; `pnpm nx test dv` and `pnpm nx typecheck dv` pass.
 
 ---
 
