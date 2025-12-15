@@ -856,7 +856,7 @@ Produce a minimal Emscripten-built QuickJS-in-Wasm binary that exposes the canon
 ### T-030: Decide and document canonical DV wire encoding
 
 **Phase:** P3 – Host ABI (DV + manifest + syscall)
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-005
 
 **Goal:**
@@ -866,19 +866,24 @@ Pick one canonical encoding for DV used for args/returns and (preferably) manife
 
 **Detailed tasks:**
 
-- [ ] Evaluate candidate formats (canonical CBOR, JCS, custom minimal binary).
+- [x] Evaluate candidate formats (canonical CBOR, JCS, custom minimal binary).
 
-- [ ] Choose one and fully specify it in `docs/dv-wire-format.md`:
-  - [ ] type tags, lengths, UTF-8 handling,
-  - [ ] numeric restrictions: finite, no NaN/Inf, no -0 (canonicalize),
-  - [ ] object key uniqueness + canonical key ordering,
-  - [ ] max sizes/depth.
+- [x] Choose one and fully specify it in `docs/dv-wire-format.md`:
+  - [x] type tags, lengths, UTF-8 handling,
+  - [x] numeric restrictions: finite, no NaN/Inf, no -0 (canonicalize),
+  - [x] object key uniqueness + canonical key ordering,
+  - [x] max sizes/depth.
 
-- [ ] Add examples (at least 5) with expected encoded form described.
+- [x] Add examples (at least 5) with expected encoded form described.
 
 **Acceptance criteria:**
 
-- [ ] `docs/dv-wire-format.md` is normative and unambiguous.
+- [x] `docs/dv-wire-format.md` is normative and unambiguous.
+
+**Current state (P3 T-030):**
+
+- DV is pinned to a deterministic CBOR subset: definite lengths only, no tags/byte strings, and a JSON-like type set (null, boolean, number, UTF-8 string, array, map with string keys).
+- `docs/dv-wire-format.md` now normatively captures type tags, numeric restrictions (finite, no NaN/Inf, `-0` canonicalized), CBOR key ordering, global limits (1 MiB encoded size, 64 depth, 65,535 entries/items, 256 KiB strings), and five hex-encoded examples.
 
 ---
 
