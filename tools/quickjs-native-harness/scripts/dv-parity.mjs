@@ -35,7 +35,11 @@ const encodeFixtures = [
   { name: 'string-null-byte', expr: '"a\\u0000b"', value: 'a\u0000b' },
   { name: 'unicode', expr: '"\\u263a"', value: '\u263a' },
   { name: 'array', expr: '["hello", 1.5, -1]', value: ['hello', 1.5, -1] },
-  { name: 'object-ordering', expr: '({ b: 2, aa: 1 })', value: { b: 2, aa: 1 } },
+  {
+    name: 'object-ordering',
+    expr: '({ b: 2, aa: 1 })',
+    value: { b: 2, aa: 1 },
+  },
   {
     name: 'null-proto-object',
     expr: '(() => { const o = Object.create(null); o.a = 1; o.b = "c"; return o; })()',

@@ -71,7 +71,10 @@ export class DvError extends Error {
   }
 }
 
-export function encodeDv(value: unknown, options?: DvEncodeOptions): Uint8Array {
+export function encodeDv(
+  value: unknown,
+  options?: DvEncodeOptions,
+): Uint8Array {
   const limits = normalizeLimits(options?.limits);
   const builder = new ByteBuilder(limits.maxEncodedBytes);
   encodeValue(value, builder, limits, 0);
@@ -107,7 +110,10 @@ export function decodeDv(
   return value;
 }
 
-export function validateDv(value: unknown, options?: DvValidateOptions): asserts value is DV {
+export function validateDv(
+  value: unknown,
+  options?: DvValidateOptions,
+): asserts value is DV {
   // Encoding performs full validation, including size/limit checks.
   encodeDv(value, options);
 }
@@ -124,7 +130,8 @@ export function isDv(value: unknown, options?: DvValidateOptions): value is DV {
 function normalizeLimits(limits?: PartialLimits): DvLimits {
   return {
     maxDepth: limits?.maxDepth ?? DV_LIMIT_DEFAULTS.maxDepth,
-    maxEncodedBytes: limits?.maxEncodedBytes ?? DV_LIMIT_DEFAULTS.maxEncodedBytes,
+    maxEncodedBytes:
+      limits?.maxEncodedBytes ?? DV_LIMIT_DEFAULTS.maxEncodedBytes,
     maxStringBytes: limits?.maxStringBytes ?? DV_LIMIT_DEFAULTS.maxStringBytes,
     maxArrayLength: limits?.maxArrayLength ?? DV_LIMIT_DEFAULTS.maxArrayLength,
     maxMapLength: limits?.maxMapLength ?? DV_LIMIT_DEFAULTS.maxMapLength,
@@ -191,7 +198,12 @@ function dvError(code: DvErrorCode, message: string): DvError {
   return new DvError(code, message);
 }
 
-function encodeValue(value: unknown, builder: ByteBuilder, limits: DvLimits, depth: number): void {
+function encodeValue(
+  value: unknown,
+  builder: ByteBuilder,
+  limits: DvLimits,
+  depth: number,
+): void {
   if (value === null) {
     builder.pushByte(0xf6);
     return;
@@ -258,9 +270,16 @@ function encodeInteger(value: number, builder: ByteBuilder): void {
   }
 }
 
-function encodeString(value: string, builder: ByteBuilder, limits: DvLimits): void {
+function encodeString(
+  value: string,
+  builder: ByteBuilder,
+  limits: DvLimits,
+): void {
   if (!isWellFormedString(value)) {
-    throw dvError('INVALID_STRING', 'string contains lone surrogate code points');
+    throw dvError(
+      'INVALID_STRING',
+      'string contains lone surrogate code points',
+    );
   }
   const bytes = textEncoder.encode(value);
   if (bytes.length > limits.maxStringBytes) {
@@ -325,8 +344,16 @@ function encodeMap(
   encodedKeys.sort((a, b) => compareCanonicalKeys(a.encoded, b.encoded));
 
   for (let i = 1; i < encodedKeys.length; i += 1) {
-    if (compareCanonicalKeys(encodedKeys[i - 1].encoded, encodedKeys[i].encoded) === 0) {
-      throw dvError('DUPLICATE_KEY', `map contains duplicate key "${encodedKeys[i].key}"`);
+    if (
+      compareCanonicalKeys(
+        encodedKeys[i - 1].encoded,
+        encodedKeys[i].encoded,
+      ) === 0
+    ) {
+      throw dvError(
+        'DUPLICATE_KEY',
+        `map contains duplicate key "${encodedKeys[i].key}"`,
+      );
     }
   }
 
@@ -339,7 +366,10 @@ function encodeMap(
 
 function encodeStringBytes(value: string, limits: DvLimits): Uint8Array {
   if (!isWellFormedString(value)) {
-    throw dvError('INVALID_STRING', 'string contains lone surrogate code points');
+    throw dvError(
+      'INVALID_STRING',
+      'string contains lone surrogate code points',
+    );
   }
   const bytes = textEncoder.encode(value);
   if (bytes.length > limits.maxStringBytes) {
@@ -351,7 +381,10 @@ function encodeStringBytes(value: string, limits: DvLimits): Uint8Array {
   return bytes;
 }
 
-function typeAndLengthBytes(major: number, length: number | bigint): Uint8Array {
+function typeAndLengthBytes(
+  major: number,
+  length: number | bigint,
+): Uint8Array {
   const builder = new ByteBuilder(Number.MAX_SAFE_INTEGER);
   encodeTypeAndLength(builder, major, length);
   return builder.toUint8Array();
@@ -363,7 +396,10 @@ function encodeTypeAndLength(
   length: number | bigint,
 ): void {
   if (typeof length === 'number' && (!Number.isInteger(length) || length < 0)) {
-    throw dvError('NON_CANONICAL_LENGTH', `length must be a non-negative integer: ${length}`);
+    throw dvError(
+      'NON_CANONICAL_LENGTH',
+      `length must be a non-negative integer: ${length}`,
+    );
   }
 
   const value = typeof length === 'bigint' ? length : BigInt(length);
@@ -543,7 +579,11 @@ function readNegative(additional: number, reader: CborReader): number {
   return -1 - Number(value);
 }
 
-function readText(additional: number, reader: CborReader, limits: DvLimits): string {
+function readText(
+  additional: number,
+  reader: CborReader,
+  limits: DvLimits,
+): string {
   const length = readLength(additional, reader);
   if (length > limits.maxStringBytes) {
     throw dvError(
@@ -643,7 +683,10 @@ function readMap(
   return result;
 }
 
-function readSimpleOrFloat(additional: number, reader: CborReader): DVPrimitive {
+function readSimpleOrFloat(
+  additional: number,
+  reader: CborReader,
+): DVPrimitive {
   if (additional === 20) {
     return false;
   }
@@ -659,7 +702,10 @@ function readSimpleOrFloat(additional: number, reader: CborReader): DVPrimitive 
       throw dvError('NAN_OR_INF', 'DV numbers must be finite');
     }
     if (Number.isInteger(value)) {
-      throw dvError('NON_CANONICAL_FLOAT', 'integers must use CBOR integer encoding');
+      throw dvError(
+        'NON_CANONICAL_FLOAT',
+        'integers must use CBOR integer encoding',
+      );
     }
     return Object.is(value, -0) ? 0 : value;
   }
@@ -687,35 +733,50 @@ function readLengthValue(additional: number, reader: CborReader): bigint {
   if (additional === 24) {
     const value = reader.readUint8();
     if (value < 24) {
-      throw dvError('NON_CANONICAL_LENGTH', 'length not using shortest encoding');
+      throw dvError(
+        'NON_CANONICAL_LENGTH',
+        'length not using shortest encoding',
+      );
     }
     return BigInt(value);
   }
   if (additional === 25) {
     const value = reader.readUint16();
     if (value <= 0xff) {
-      throw dvError('NON_CANONICAL_LENGTH', 'length not using shortest encoding');
+      throw dvError(
+        'NON_CANONICAL_LENGTH',
+        'length not using shortest encoding',
+      );
     }
     return BigInt(value);
   }
   if (additional === 26) {
     const value = reader.readUint32();
     if (value <= 0xffff) {
-      throw dvError('NON_CANONICAL_LENGTH', 'length not using shortest encoding');
+      throw dvError(
+        'NON_CANONICAL_LENGTH',
+        'length not using shortest encoding',
+      );
     }
     return BigInt(value);
   }
   if (additional === 27) {
     const value = reader.readUint64();
     if (value <= 0xffffffffn) {
-      throw dvError('NON_CANONICAL_LENGTH', 'length not using shortest encoding');
+      throw dvError(
+        'NON_CANONICAL_LENGTH',
+        'length not using shortest encoding',
+      );
     }
     return value;
   }
   if (additional === 31) {
     throw dvError('NON_CANONICAL_LENGTH', 'indefinite lengths are not allowed');
   }
-  throw dvError('UNSUPPORTED_CBOR', `unsupported additional info ${additional}`);
+  throw dvError(
+    'UNSUPPORTED_CBOR',
+    `unsupported additional info ${additional}`,
+  );
 }
 
 function compareCanonicalKeys(a: Uint8Array, b: Uint8Array): number {
