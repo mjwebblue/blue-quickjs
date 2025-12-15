@@ -919,7 +919,7 @@ Provide TS reference implementation for DV validation and canonical encode/decod
 ### T-032: Implement VM-side DV encode/decode (QuickJS fork)
 
 **Phase:** P3 – Host ABI (DV + manifest + syscall)
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-030, T-010
 
 **Goal:**
@@ -929,14 +929,20 @@ Implement C encode/decode for DV to bridge JS values and request/response bytes 
 
 **Detailed tasks:**
 
-- [ ] JS→DV conversion enforcing DV restrictions deterministically.
-- [ ] DV→JS conversion preserving canonical key insertion order.
-- [ ] Enforce limits.
-- [ ] Add harness tests that compare encoded bytes to TS reference fixtures.
+- [x] JS→DV conversion enforcing DV restrictions deterministically.
+- [x] DV→JS conversion preserving canonical key insertion order.
+- [x] Enforce limits.
+- [x] Add harness tests that compare encoded bytes to TS reference fixtures.
 
 **Acceptance criteria:**
 
-- [ ] Byte-level parity tests vs `libs/dv` pass for a shared fixture set.
+- [x] Byte-level parity tests vs `libs/dv` pass for a shared fixture set.
+
+**Current state (P3 T-032):**
+
+- DV encode/decode lives outside `quickjs.c` in `vendor/quickjs/quickjs-dv.c` with public APIs `JS_EncodeDV`, `JS_DecodeDV`, `JS_FreeDVBuffer`, and default limits `JS_DV_LIMIT_DEFAULTS` exposed via `quickjs.h`.
+- The C implementation mirrors the TS reference: canonical CBOR subset, safe integer enforcement, `-0` canonicalization, UTF-8 validation, canonical map key ordering, depth/size limits, and null-prototype object decoding.
+- Native harness now supports `--dv-encode` (evaluate JS and emit DV hex) and `--dv-decode <hex>` (decode DV bytes and emit JSON). `tools/quickjs-native-harness/scripts/dv-parity.mjs` compares harness DV bytes/decodes against the TS `encodeDv`/`decodeDv` fixtures (null/boolean/ints/floats/strings/arrays/maps/null-proto/nested/-0), and `test.sh` runs this parity check.
 
 ---
 

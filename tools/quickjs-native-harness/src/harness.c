@@ -16,6 +16,8 @@ typedef struct {
   int report_gas;
   int report_trace;
   const char *dump_global;
+  int dv_encode;
+  const char *dv_decode_hex;
 } HarnessOptions;
 
 typedef struct {
@@ -23,6 +25,61 @@ typedef struct {
   int has_trace;
   JSGasTrace trace;
 } HarnessSnapshot;
+
+static int hex_value(char c) {
+  if (c >= '0' && c <= '9') {
+    return c - '0';
+  }
+  if (c >= 'a' && c <= 'f') {
+    return 10 + (c - 'a');
+  }
+  if (c >= 'A' && c <= 'F') {
+    return 10 + (c - 'A');
+  }
+  return -1;
+}
+
+static int parse_hex_string(const char *hex, uint8_t **out, size_t *out_len) {
+  size_t len = strlen(hex);
+  if ((len % 2) != 0) {
+    fprintf(stderr, "Invalid hex string (odd length)\n");
+    return 1;
+  }
+
+  size_t byte_len = len / 2;
+  if (byte_len == 0) {
+    *out = NULL;
+    *out_len = 0;
+    return 0;
+  }
+
+  uint8_t *buf = (uint8_t *)malloc(byte_len);
+  if (!buf) {
+    fprintf(stderr, "Out of memory parsing hex string\n");
+    return 1;
+  }
+
+  for (size_t i = 0; i < byte_len; i++) {
+    int high = hex_value(hex[2 * i]);
+    int low = hex_value(hex[2 * i + 1]);
+    if (high < 0 || low < 0) {
+      free(buf);
+      fprintf(stderr, "Invalid hex digit in --dv-decode value\n");
+      return 1;
+    }
+    buf[i] = (uint8_t)((high << 4) | low);
+  }
+
+  *out = buf;
+  *out_len = byte_len;
+  return 0;
+}
+
+static void print_hex_buffer(const uint8_t *data, size_t len) {
+  for (size_t i = 0; i < len; i++) {
+    fprintf(stdout, "%02x", data[i]);
+  }
+}
 
 static int init_runtime(HarnessRuntime *runtime) {
   if (JS_NewDeterministicRuntime(&runtime->rt, &runtime->ctx) != 0) {
@@ -157,6 +214,115 @@ static int run_gc_checkpoint(JSContext *ctx, const HarnessOptions *options) {
   return print_exception(ctx, options);
 }
 
+static int encode_dv_source(JSContext *ctx, const HarnessOptions *options) {
+  if (run_gc_checkpoint(ctx, options) != 0) {
+    return 1;
+  }
+
+  JSValue result = JS_Eval(ctx, options->code, strlen(options->code), "<eval>", JS_EVAL_TYPE_GLOBAL);
+  if (JS_IsException(result)) {
+    JS_FreeValue(ctx, result);
+    if (run_gc_checkpoint(ctx, options) != 0) {
+      return 1;
+    }
+    return print_exception(ctx, options);
+  }
+
+  JSDvBuffer buffer = {0};
+  int encode_rc = JS_EncodeDV(ctx, result, NULL, &buffer);
+  JS_FreeValue(ctx, result);
+
+  if (encode_rc != 0) {
+    if (run_gc_checkpoint(ctx, options) != 0) {
+      JS_FreeDVBuffer(ctx, &buffer);
+      return 1;
+    }
+    JS_FreeDVBuffer(ctx, &buffer);
+    return print_exception(ctx, options);
+  }
+
+  if (run_gc_checkpoint(ctx, options) != 0) {
+    JS_FreeDVBuffer(ctx, &buffer);
+    return 1;
+  }
+
+  HarnessSnapshot snapshot = {0};
+  snapshot.gas_remaining = JS_GetGasRemaining(ctx);
+  if (options->report_trace) {
+    snapshot.has_trace = JS_ReadGasTrace(ctx, &snapshot.trace) == 0;
+  }
+
+  fprintf(stdout, "DV ");
+  print_hex_buffer(buffer.data, buffer.length);
+  print_gas_suffix(options, &snapshot);
+  print_trace_suffix(options, &snapshot);
+  fprintf(stdout, "\n");
+
+  JS_FreeDVBuffer(ctx, &buffer);
+  return 0;
+}
+
+static int decode_dv_hex(JSContext *ctx, const HarnessOptions *options) {
+  uint8_t *bytes = NULL;
+  size_t byte_len = 0;
+
+  if (parse_hex_string(options->dv_decode_hex, &bytes, &byte_len) != 0) {
+    return 2;
+  }
+
+  if (run_gc_checkpoint(ctx, options) != 0) {
+    free(bytes);
+    return 1;
+  }
+
+  JSValue decoded = JS_DecodeDV(ctx, bytes, byte_len, NULL);
+  free(bytes);
+  if (JS_IsException(decoded)) {
+    if (run_gc_checkpoint(ctx, options) != 0) {
+      return 1;
+    }
+    return print_exception(ctx, options);
+  }
+
+  JSValue json = JS_JSONStringify(ctx, decoded, JS_UNDEFINED, JS_UNDEFINED);
+  JS_FreeValue(ctx, decoded);
+
+  if (JS_IsException(json)) {
+    if (run_gc_checkpoint(ctx, options) != 0) {
+      return 1;
+    }
+    return print_exception(ctx, options);
+  }
+
+  const char *json_str = JS_ToCString(ctx, json);
+  if (!json_str) {
+    JS_FreeValue(ctx, json);
+    fprintf(stdout, "ERROR <stringify>\n");
+    return 1;
+  }
+
+  if (run_gc_checkpoint(ctx, options) != 0) {
+    JS_FreeCString(ctx, json_str);
+    JS_FreeValue(ctx, json);
+    return 1;
+  }
+
+  HarnessSnapshot snapshot = {0};
+  snapshot.gas_remaining = JS_GetGasRemaining(ctx);
+  if (options->report_trace) {
+    snapshot.has_trace = JS_ReadGasTrace(ctx, &snapshot.trace) == 0;
+  }
+
+  fprintf(stdout, "DVRESULT %s", json_str);
+  print_gas_suffix(options, &snapshot);
+  print_trace_suffix(options, &snapshot);
+  fprintf(stdout, "\n");
+
+  JS_FreeCString(ctx, json_str);
+  JS_FreeValue(ctx, json);
+  return 0;
+}
+
 static int eval_source(JSContext *ctx, const char *code, const HarnessOptions *options) {
   if (run_gc_checkpoint(ctx, options) != 0) {
     return 1;
@@ -213,7 +379,12 @@ static int eval_source(JSContext *ctx, const char *code, const HarnessOptions *o
 
 static void print_usage(const char *prog) {
   fprintf(stderr,
-          "Usage: %s [--gas-limit <u64>] [--report-gas] [--gas-trace] [--dump-global <name>] --eval \"<js-source>\"\n",
+          "Usage:\n"
+          "  %s [--gas-limit <u64>] [--report-gas] [--gas-trace] [--dump-global <name>] --eval \"<js-source>\"\n"
+          "  %s --dv-encode --eval \"<js-source>\"\n"
+          "  %s --dv-decode <hex-string>\n",
+          prog,
+          prog,
           prog);
 }
 
@@ -223,6 +394,8 @@ static int parse_args(int argc, char **argv, HarnessOptions *opts) {
   opts->report_gas = 0;
   opts->report_trace = 0;
   opts->dump_global = NULL;
+  opts->dv_encode = 0;
+  opts->dv_decode_hex = NULL;
 
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--eval") == 0) {
@@ -261,6 +434,20 @@ static int parse_args(int argc, char **argv, HarnessOptions *opts) {
       continue;
     }
 
+    if (strcmp(argv[i], "--dv-encode") == 0) {
+      opts->dv_encode = 1;
+      continue;
+    }
+
+    if (strcmp(argv[i], "--dv-decode") == 0) {
+      if (i + 1 >= argc) {
+        print_usage(argv[0]);
+        return 2;
+      }
+      opts->dv_decode_hex = argv[++i];
+      continue;
+    }
+
     if (strcmp(argv[i], "--dump-global") == 0) {
       if (i + 1 >= argc) {
         print_usage(argv[0]);
@@ -272,6 +459,14 @@ static int parse_args(int argc, char **argv, HarnessOptions *opts) {
 
     print_usage(argv[0]);
     return 2;
+  }
+
+  if (opts->dv_decode_hex) {
+    if (opts->code != NULL || opts->dv_encode) {
+      print_usage(argv[0]);
+      return 2;
+    }
+    return 0;
   }
 
   if (opts->code == NULL) {
@@ -306,12 +501,21 @@ int main(int argc, char **argv) {
     }
   }
 
-  if (run_gc_checkpoint(runtime.ctx, &options) != 0) {
-    free_runtime(&runtime);
-    return 1;
+  int rc = 0;
+  if (options.dv_decode_hex) {
+    rc = decode_dv_hex(runtime.ctx, &options);
+  } else {
+    if (run_gc_checkpoint(runtime.ctx, &options) != 0) {
+      free_runtime(&runtime);
+      return 1;
+    }
+    if (options.dv_encode) {
+      rc = encode_dv_source(runtime.ctx, &options);
+    } else {
+      rc = eval_source(runtime.ctx, options.code, &options);
+    }
   }
 
-  int rc = eval_source(runtime.ctx, options.code, &options);
   free_runtime(&runtime);
   return rc;
 }
