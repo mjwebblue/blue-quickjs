@@ -1200,7 +1200,7 @@ Expose host functions in JS as `Host.v1.*`, generated from manifest entries (js_
 ### T-041: Install Blue-style ergonomic globals using Host.v1 wrappers
 
 **Phase:** P3 – Host ABI (DV + manifest + syscall)
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-040
 
 **Goal:**
@@ -1210,16 +1210,23 @@ Provide `document()`, `event`, `steps`, and `canon` helpers consistent with Blue
 
 **Detailed tasks:**
 
-- [ ] Implement `document(path)` as a wrapper calling `Host.v1.document.get(path)`.
-- [ ] Implement `document.canonical(path)` calling `Host.v1.document.getCanonical(path)`.
-- [ ] Accept injected DV values for `event`, `eventCanonical`, `steps` from input envelope `I` (wired later).
-- [ ] Implement `canon.unwrap` and `canon.at` as pure JS helpers (loaded deterministically by init).
-- [ ] Freeze/lock `document`, `event`, `eventCanonical`, `steps`, `canon`.
+ - [x] Implement `document(path)` as a wrapper calling `Host.v1.document.get(path)`.
+ - [x] Implement `document.canonical(path)` calling `Host.v1.document.getCanonical(path)`.
+ - [x] Accept injected DV values for `event`, `eventCanonical`, `steps` from input envelope `I` (wired later).
+ - [x] Implement `canon.unwrap` and `canon.at` as pure JS helpers (loaded deterministically by init).
+ - [x] Freeze/lock `document`, `event`, `eventCanonical`, `steps`, `canon`.
 
 **Acceptance criteria:**
 
-- [ ] A test script can call `document("x")` and read `event`/`steps`.
-- [ ] Helpers behave deterministically and cannot be overridden by user code.
+ - [x] A test script can call `document("x")` and read `event`/`steps`.
+ - [x] Helpers behave deterministically and cannot be overridden by user code.
+
+**Current state (P3 T-041):**
+
+- Deterministic init now installs ergonomic globals once the manifest is loaded: `document` calls `Host.v1.document.get`, `document.canonical` calls `Host.v1.document.getCanonical`, and helpers are non-extensible.
+- Context blob DV decoding clones and deep-freezes `event`, `eventCanonical`, and `steps` before exposing them on the global.
+- Added pure C `canon.unwrap` (DV roundtrip + freeze) and `canon.at` (safe path walker with deterministic errors and bounds) under a frozen `canon` object.
+- Native harness tests now cover ergonomic globals + canon helpers using the pinned context blob fixture; full harness suite passes.
 
 ---
 

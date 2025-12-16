@@ -23,6 +23,7 @@ HOST_UNITS_FLOAT_HEX="a2626f6b0165756e697473fb3ff8000000000000"
 HOST_ERR_CODE_NUMBER_HEX="a263657272a164636f6465187b65756e69747300"
 HOST_UNITS_ZERO_HEX="a2626f6b0065756e69747300"
 HOST_UNITS_ONE_HEX="a2626f6b0065756e69747301"
+CONTEXT_BLOB_HEX="a3656576656e74a163666f6f01657374657073826273316273326e6576656e7443616e6f6e6963616ca163626172f5"
 
 assert_output() {
   local name="$1"
@@ -171,6 +172,66 @@ capability_snapshot_js="$(cat <<'EOF'
 EOF
 )"
 
+ergonomic_globals_js="$(cat <<'EOF'
+(() => {
+  const docDesc = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  const canonicalDesc = Object.getOwnPropertyDescriptor(document, 'canonical');
+  return {
+    document: {
+      value: document('foo'),
+      canonical: document.canonical('bar'),
+      desc: docDesc
+        ? {
+            writable: docDesc.writable,
+            enumerable: docDesc.enumerable,
+            configurable: docDesc.configurable
+          }
+        : null,
+      canonicalDesc: canonicalDesc
+        ? {
+            writable: canonicalDesc.writable,
+            enumerable: canonicalDesc.enumerable,
+            configurable: canonicalDesc.configurable
+          }
+        : null,
+      extensible: Object.isExtensible(document)
+    },
+    context: {
+      event,
+      eventCanonical,
+      steps,
+      frozen: {
+        event: Object.isFrozen(event),
+        eventCanonical: Object.isFrozen(eventCanonical),
+        steps: Object.isFrozen(steps)
+      }
+    }
+  };
+})()
+EOF
+)"
+
+canon_helpers_js="$(cat <<'EOF'
+(() => {
+  const value = canon.unwrap({ b: 2, a: { z: 9 } });
+  return {
+    keys: Object.keys(value),
+    nested: canon.at(value, ['a', 'z']),
+    missing: canon.at(value, ['missing']) ?? null,
+    badPath: (() => {
+      try {
+        canon.at(value, 'oops');
+        return 'no error';
+      } catch (e) {
+        return String(e);
+      }
+    })(),
+    frozen: Object.isFrozen(value)
+  };
+})()
+EOF
+)"
+
 assert_output "basic addition" "1 + 2" "RESULT 3"
 assert_output "manifest hash mismatch" "1 + 1" "ERROR ManifestError: abi manifest hash mismatch" --abi-manifest-hash "${BAD_MANIFEST_HASH}"
 assert_sha "sha256 empty" "" "SHA256 ${SHA_EMPTY}"
@@ -202,12 +263,14 @@ assert_output "Promise disabled" "Promise.resolve(1)" "ERROR TypeError: Promise 
 assert_output "queueMicrotask missing" "typeof queueMicrotask" "RESULT \"undefined\""
 assert_output "Host descriptor" "${host_descriptor_js}" "RESULT {\"configurable\":false,\"enumerable\":false,\"writable\":false,\"hostType\":\"object\",\"v1Type\":\"object\",\"v1NullProto\":true}"
 assert_output "capability snapshot" "${capability_snapshot_js}" "RESULT {\"eval\":{\"ok\":false,\"error\":\"TypeError: eval is disabled in deterministic mode\"},\"Function\":{\"ok\":false,\"error\":\"TypeError: Function is disabled in deterministic mode\"},\"RegExp\":{\"ok\":false,\"error\":\"TypeError: RegExp is disabled in deterministic mode\"},\"Proxy\":{\"ok\":false,\"error\":\"TypeError: Proxy is disabled in deterministic mode\"},\"Promise\":{\"ok\":false,\"error\":\"TypeError: Promise is disabled in deterministic mode\"},\"MathRandom\":{\"ok\":false,\"error\":\"TypeError: Math.random is disabled in deterministic mode\"},\"Date\":{\"ok\":true,\"value\":\"undefined\"},\"setTimeout\":{\"ok\":true,\"value\":\"undefined\"},\"ArrayBuffer\":{\"ok\":false,\"error\":\"TypeError: ArrayBuffer is disabled in deterministic mode\"},\"SharedArrayBuffer\":{\"ok\":false,\"error\":\"TypeError: SharedArrayBuffer is disabled in deterministic mode\"},\"DataView\":{\"ok\":false,\"error\":\"TypeError: DataView is disabled in deterministic mode\"},\"Uint8Array\":{\"ok\":false,\"error\":\"TypeError: Typed arrays are disabled in deterministic mode\"},\"Atomics\":{\"ok\":false,\"error\":\"TypeError: Atomics is disabled in deterministic mode\"},\"WebAssembly\":{\"ok\":false,\"error\":\"TypeError: WebAssembly is disabled in deterministic mode\"},\"consoleLog\":{\"ok\":false,\"error\":\"TypeError: console is disabled in deterministic mode\"},\"print\":{\"ok\":false,\"error\":\"TypeError: print is disabled in deterministic mode\"},\"globalOrder\":{\"ok\":true,\"value\":[\"console\",\"print\",\"Host\"]},\"hostImmutable\":{\"ok\":true,\"value\":{\"sameRef\":true,\"hasV1\":true,\"added\":false,\"desc\":{\"value\":{},\"writable\":false,\"enumerable\":false,\"configurable\":false},\"protoNull\":true,\"v1ProtoNull\":true,\"hostIsExtensible\":false,\"hostV1Extensible\":false,\"overwrite\":{\"same\":true,\"threw\":true,\"writable\":false,\"configurable\":false}}}}"
+assert_output "ergonomic globals" "${ergonomic_globals_js}" "RESULT {\"document\":{\"value\":\"foo\",\"canonical\":\"bar\",\"desc\":{\"writable\":false,\"enumerable\":false,\"configurable\":false},\"canonicalDesc\":{\"writable\":false,\"enumerable\":false,\"configurable\":false},\"extensible\":false},\"context\":{\"event\":{\"foo\":1},\"eventCanonical\":{\"bar\":true},\"steps\":[\"s1\",\"s2\"],\"frozen\":{\"event\":true,\"eventCanonical\":true,\"steps\":true}}}" --context-blob-hex "${CONTEXT_BLOB_HEX}"
 assert_output "Host.v1 document.get ok" "Host.v1.document.get('foo')" "RESULT \"foo\""
 assert_output "Host.v1 document.getCanonical ok" "Host.v1.document.getCanonical('bar')" "RESULT \"bar\""
 assert_output "Host.v1 emit" "Host.v1.emit({ a: 1 })" "RESULT null"
 assert_output "Host.v1 document missing" "Host.v1.document.get('missing')" "ERROR HostError: host/not_found"
 assert_output "Host.v1 document arg type" "Host.v1.document.get(123)" "ERROR TypeError: Host.v1.document.get argument 1 must be a string"
 assert_output "Host.v1 document arg utf8 limit" "Host.v1.document.get('x'.repeat(2050))" "ERROR TypeError: Host.v1.document.get argument 1 exceeds utf8 limit (2050 > 2048)"
+assert_output "canon helpers" "${canon_helpers_js}" "RESULT {\"keys\":[\"a\",\"b\"],\"nested\":9,\"missing\":null,\"badPath\":\"TypeError: canon.at path must be an array\",\"frozen\":true}" --context-blob-hex "${CONTEXT_BLOB_HEX}"
 assert_host_call "host_call echo" "HOSTCALL 0a0b0c GAS remaining=100 used=0" --host-call "0a0b0c" --gas-limit 100 --report-gas
 assert_host_call "host_call request limit" "ERROR TypeError: host_call request exceeds max_request_bytes" --host-call "010203" --host-max-request 2
 assert_host_call "host_call response limit" "ERROR HostError: host/transport" --host-call "0a0b0c" --host-max-request 3 --host-max-response 2
