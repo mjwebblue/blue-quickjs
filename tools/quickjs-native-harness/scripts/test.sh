@@ -286,6 +286,7 @@ assert_host_call "host_call units above max_units zero" "ERROR HostError: host/e
 assert_host_call "host_call ok envelope" "HOSTRESP {\"value\":\"hello\"} UNITS 5" --host-call "${HOST_OK_ENVELOPE_HEX}" --host-parse-envelope --host-max-units 10
 
 node "${SCRIPT_DIR}/gas-goldens.mjs"
+node "${SCRIPT_DIR}/host-gas.mjs"
 node "${SCRIPT_DIR}/dv-parity.mjs"
 
 echo "quickjs-native-harness test passed"

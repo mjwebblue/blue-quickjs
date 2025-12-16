@@ -1233,7 +1233,7 @@ Provide `document()`, `event`, `steps`, and `canon` helpers consistent with Blue
 ### T-042: Implement two-phase gas charging for host calls (VM)
 
 **Phase:** P3 – Host ABI (DV + manifest + syscall)
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-040, T-022
 
 **Goal:**
@@ -1243,14 +1243,20 @@ Ensure host calls incur deterministic gas independent of host performance.
 
 **Detailed tasks:**
 
-- [ ] Implement pre-charge: base + arg_bytes \* k_arg.
-- [ ] Implement post-charge: out*bytes * k*out + units * k_units.
-- [ ] Ensure OOG after host returns results in deterministic abort with no additional effects (for READ-only this is simpler; still must be deterministic).
-- [ ] Add tests for host-call gas formulas using a mock host_call stub.
+- [x] Implement pre-charge: base + arg_bytes \* k_arg.
+- [x] Implement post-charge: out*bytes * k*out + units * k_units.
+- [x] Ensure OOG after host returns results in deterministic abort with no additional effects (for READ-only this is simpler; still must be deterministic).
+- [x] Add tests for host-call gas formulas using a mock host_call stub.
 
 **Acceptance criteria:**
 
-- [ ] Gas charged for host calls matches expected formula exactly.
+- [x] Gas charged for host calls matches expected formula exactly.
+
+**Current state (P3 T-042):**
+
+- Host.v1 wrappers charge gas pre-call (`base + arg_bytes * k_arg`) and post-call (`resp_bytes * k_ret + units * k_units`) using the manifest parameters; overflow is guarded and out-of-gas is uncatchable.
+- Added native harness coverage (`tools/quickjs-native-harness/scripts/host-gas.mjs`) that DV-encodes manifest fixture args/responses and asserts the measured host-call gas matches the formula for ok, err, and emit paths; wired into `tools/quickjs-native-harness/scripts/test.sh`.
+- Existing host-call arg/response validation, manifest limits, and HostError mapping remain unchanged; the gas tests ensure formula stability across refactors.
 
 ---
 
