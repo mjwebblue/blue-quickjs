@@ -1071,7 +1071,7 @@ VM receives manifest bytes at init, computes hash, and exact-matches `abi_manife
 ### T-037: Specify the Wasm `host_call` import ABI and memory ownership
 
 **Phase:** P3 – Host ABI (DV + manifest + syscall)
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-005
 
 **Goal:**
@@ -1081,16 +1081,16 @@ Define the exact Wasm import signature and buffer ownership rules implementing `
 
 **Detailed tasks:**
 
-- [ ] Write `docs/host-call-abi.md` specifying:
-  - [ ] function signature (fn_id + ptr/len for req; plus a response mechanism),
-  - [ ] max request/response sizes,
-  - [ ] error behavior for malformed responses,
-  - [ ] memory ownership (who allocates response bytes and how VM reads them),
-  - [ ] explicit no-reentrancy rule (host_call cannot call back into VM).
+- [x] Write `docs/host-call-abi.md` specifying:
+  - [x] function signature (fn_id + ptr/len for req; plus a response mechanism),
+  - [x] max request/response sizes,
+  - [x] error behavior for malformed responses,
+  - [x] memory ownership (who allocates response bytes and how VM reads them),
+  - [x] explicit no-reentrancy rule (host_call cannot call back into VM).
 
 **Acceptance criteria:**
 
-- [ ] The ABI doc is unambiguous enough to implement in both wasm host (TS) and VM (C).
+- [x] The ABI doc is unambiguous enough to implement in both wasm host (TS) and VM (C).
 
 ---
 
