@@ -8,6 +8,14 @@ BIN="${REPO_ROOT}/tools/quickjs-native-harness/dist/quickjs-native-harness"
 # Ensure build is present.
 "${SCRIPT_DIR}/build.sh" >/dev/null
 
+HOST_MANIFEST_HEX="$(tr -d '\r\n' < "${REPO_ROOT}/libs/test-harness/fixtures/abi-manifest/host-v1.bytes.hex")"
+HOST_MANIFEST_HASH="$(tr -d '\r\n' < "${REPO_ROOT}/libs/test-harness/fixtures/abi-manifest/host-v1.hash")"
+COMMON_ARGS=(--abi-manifest-hex "${HOST_MANIFEST_HEX}" --abi-manifest-hash "${HOST_MANIFEST_HASH}")
+BAD_MANIFEST_HASH="0000000000000000000000000000000000000000000000000000000000000000"
+SHA_EMPTY="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+SHA_ABC="ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+SHA_LONG="248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
+
 assert_output() {
   local name="$1"
   local code="$2"
@@ -15,10 +23,26 @@ assert_output() {
   shift 3
 
   local output
-  output="$("${BIN}" "$@" --eval "${code}" || true)"
+  output="$("${BIN}" "${COMMON_ARGS[@]}" "$@" --eval "${code}" || true)"
 
   if [[ "${output}" != "${expected}" ]]; then
     echo "Harness output mismatch for '${name}'" >&2
+    echo " expected: ${expected}" >&2
+    echo "   actual: ${output}" >&2
+    exit 1
+  fi
+}
+
+assert_sha() {
+  local name="$1"
+  local hex="$2"
+  local expected="$3"
+
+  local output
+  output="$("${BIN}" --sha256-hex "${hex}" || true)"
+
+  if [[ "${output}" != "${expected}" ]]; then
+    echo "SHA mismatch for '${name}'" >&2
     echo " expected: ${expected}" >&2
     echo "   actual: ${output}" >&2
     exit 1
@@ -101,6 +125,10 @@ EOF
 )"
 
 assert_output "basic addition" "1 + 2" "RESULT 3"
+assert_output "manifest hash mismatch" "1 + 1" "ERROR ManifestError: abi manifest hash mismatch" --abi-manifest-hash "${BAD_MANIFEST_HASH}"
+assert_sha "sha256 empty" "" "SHA256 ${SHA_EMPTY}"
+assert_sha "sha256 abc" "616263" "SHA256 ${SHA_ABC}"
+assert_sha "sha256 long" "6162636462636465636465666465666765666768666768696768696a68696a6b696a6b6c6a6b6c6d6b6c6d6e6c6d6e6f6d6e6f706e6f7071" "SHA256 ${SHA_LONG}"
 assert_output "eval disabled" "eval('1 + 1')" "ERROR TypeError: eval is disabled in deterministic mode"
 assert_output "Function disabled" "(new Function('return 7'))()" "ERROR TypeError: Function is disabled in deterministic mode"
 assert_output "Function ctor via Function.prototype.constructor" "(() => { const RealFunction = (function () {}).constructor; return RealFunction('return 3')(); })()" "ERROR TypeError: Function constructor is disabled in deterministic mode"

@@ -10,6 +10,34 @@ const harnessRoot = join(repoRoot, 'tools', 'quickjs-native-harness');
 const fixturesRoot = join(harnessRoot, 'fixtures');
 const binPath = join(harnessRoot, 'dist', 'quickjs-native-harness');
 const fixturesPath = join(scriptDir, 'gas-goldens.json');
+const manifestHex = readFileSync(
+  join(
+    repoRoot,
+    'libs',
+    'test-harness',
+    'fixtures',
+    'abi-manifest',
+    'host-v1.bytes.hex',
+  ),
+  'utf8',
+).replace(/[\r\n\s]+/g, '');
+const manifestHash = readFileSync(
+  join(
+    repoRoot,
+    'libs',
+    'test-harness',
+    'fixtures',
+    'abi-manifest',
+    'host-v1.hash',
+  ),
+  'utf8',
+).trim();
+const manifestArgs = [
+  '--abi-manifest-hex',
+  manifestHex,
+  '--abi-manifest-hash',
+  manifestHash,
+];
 
 if (!existsSync(binPath)) {
   console.error(`Harness binary not found at ${binPath}. Run build first.`);
@@ -23,7 +51,7 @@ const failures = [];
 for (const testCase of cases) {
   const codePath = join(fixturesRoot, testCase.fixture);
   const code = readFileSync(codePath, 'utf8');
-  const args = [...(testCase.args || []), '--eval', code];
+  const args = [...manifestArgs, ...(testCase.args || []), '--eval', code];
 
   const result = spawnSync(binPath, args, { encoding: 'utf8' });
   const stdout = (result.stdout || '').trim();

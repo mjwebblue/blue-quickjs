@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +15,34 @@ const harnessPath = path.join(
   'dist',
   'quickjs-native-harness',
 );
+const manifestHex = readFileSync(
+  path.join(
+    repoRoot,
+    'libs',
+    'test-harness',
+    'fixtures',
+    'abi-manifest',
+    'host-v1.bytes.hex',
+  ),
+  'utf8',
+).replace(/[\r\n\s]+/g, '');
+const manifestHash = readFileSync(
+  path.join(
+    repoRoot,
+    'libs',
+    'test-harness',
+    'fixtures',
+    'abi-manifest',
+    'host-v1.hash',
+  ),
+  'utf8',
+).trim();
+const manifestArgs = [
+  '--abi-manifest-hex',
+  manifestHex,
+  '--abi-manifest-hash',
+  manifestHash,
+];
 
 if (!existsSync(harnessPath)) {
   throw new Error(
@@ -113,7 +141,9 @@ const toHex = (bytes) =>
     .join('');
 
 const runHarness = (args, label) => {
-  const result = spawnSync(harnessPath, args, { encoding: 'utf8' });
+  const result = spawnSync(harnessPath, [...manifestArgs, ...args], {
+    encoding: 'utf8',
+  });
   if (result.error) {
     throw result.error;
   }

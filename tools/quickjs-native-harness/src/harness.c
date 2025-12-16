@@ -1,4 +1,5 @@
 #include "quickjs.h"
+#include "quickjs-internal.h"
 #include <errno.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -18,6 +19,11 @@ typedef struct {
   const char *dump_global;
   int dv_encode;
   const char *dv_decode_hex;
+  const char *abi_manifest_hex;
+  const char *abi_manifest_file;
+  const char *abi_manifest_hash;
+  const char *context_blob_hex;
+  const char *sha256_hex;
 } HarnessOptions;
 
 typedef struct {
@@ -25,6 +31,10 @@ typedef struct {
   int has_trace;
   JSGasTrace trace;
 } HarnessSnapshot;
+
+static int print_exception(JSContext *ctx, const HarnessOptions *options);
+static void free_runtime(HarnessRuntime *runtime);
+static int run_sha256(const HarnessOptions *options);
 
 static int hex_value(char c) {
   if (c >= '0' && c <= '9') {
@@ -41,12 +51,26 @@ static int hex_value(char c) {
 
 static int parse_hex_string(const char *hex, uint8_t **out, size_t *out_len) {
   size_t len = strlen(hex);
-  if ((len % 2) != 0) {
-    fprintf(stderr, "Invalid hex string (odd length)\n");
+  size_t digit_count = 0;
+
+  for (size_t i = 0; i < len; i++) {
+    char c = hex[i];
+    if (c == ' ' || c == '\n' || c == '\r' || c == '\t') {
+      continue;
+    }
+    if (hex_value(c) < 0) {
+      fprintf(stderr, "Invalid hex digit in input\n");
+      return 1;
+    }
+    digit_count++;
+  }
+
+  if ((digit_count % 2) != 0) {
+    fprintf(stderr, "Invalid hex string (odd number of digits)\n");
     return 1;
   }
 
-  size_t byte_len = len / 2;
+  size_t byte_len = digit_count / 2;
   if (byte_len == 0) {
     *out = NULL;
     *out_len = 0;
@@ -59,20 +83,63 @@ static int parse_hex_string(const char *hex, uint8_t **out, size_t *out_len) {
     return 1;
   }
 
-  for (size_t i = 0; i < byte_len; i++) {
-    int high = hex_value(hex[2 * i]);
-    int low = hex_value(hex[2 * i + 1]);
-    if (high < 0 || low < 0) {
+  int pending = -1;
+  size_t out_index = 0;
+  for (size_t i = 0; i < len; i++) {
+    char c = hex[i];
+    if (c == ' ' || c == '\n' || c == '\r' || c == '\t') {
+      continue;
+    }
+    int value = hex_value(c);
+    if (value < 0) {
       free(buf);
-      fprintf(stderr, "Invalid hex digit in --dv-decode value\n");
+      fprintf(stderr, "Invalid hex digit in input\n");
       return 1;
     }
-    buf[i] = (uint8_t)((high << 4) | low);
+    if (pending < 0) {
+      pending = value;
+    } else {
+      buf[out_index++] = (uint8_t)((pending << 4) | value);
+      pending = -1;
+    }
   }
 
   *out = buf;
   *out_len = byte_len;
   return 0;
+}
+
+static char *read_file_to_string(const char *path) {
+  FILE *file = fopen(path, "rb");
+  if (!file) {
+    fprintf(stderr, "Failed to open %s: %s\n", path, strerror(errno));
+    return NULL;
+  }
+
+  if (fseek(file, 0, SEEK_END) != 0) {
+    fprintf(stderr, "Failed to seek %s\n", path);
+    fclose(file);
+    return NULL;
+  }
+
+  long size = ftell(file);
+  if (size < 0 || fseek(file, 0, SEEK_SET) != 0) {
+    fprintf(stderr, "Failed to determine size for %s\n", path);
+    fclose(file);
+    return NULL;
+  }
+
+  char *buffer = (char *)malloc((size_t)size + 1);
+  if (!buffer) {
+    fprintf(stderr, "Out of memory reading %s\n", path);
+    fclose(file);
+    return NULL;
+  }
+
+  size_t read_bytes = fread(buffer, 1, (size_t)size, file);
+  fclose(file);
+  buffer[read_bytes] = '\0';
+  return buffer;
 }
 
 static void print_hex_buffer(const uint8_t *data, size_t len) {
@@ -81,13 +148,109 @@ static void print_hex_buffer(const uint8_t *data, size_t len) {
   }
 }
 
-static int init_runtime(HarnessRuntime *runtime) {
+static int run_sha256(const HarnessOptions *options) {
+  uint8_t *bytes = NULL;
+  size_t len = 0;
+  uint8_t hash[32];
+  char hex[65];
+
+  if (parse_hex_string(options->sha256_hex, &bytes, &len) != 0) {
+    return 2;
+  }
+
+  js_sha256(bytes ? bytes : (const uint8_t *)"", len, hash);
+  js_sha256_to_hex(hash, hex);
+  free(bytes);
+
+  fprintf(stdout, "SHA256 %s\n", hex);
+  return 0;
+}
+
+static int init_runtime(HarnessRuntime *runtime, const HarnessOptions *options) {
+  uint8_t *manifest_bytes = NULL;
+  size_t manifest_len = 0;
+  uint8_t *context_blob = NULL;
+  size_t context_blob_len = 0;
+  char *manifest_hex_from_file = NULL;
+  int rc = 0;
+
   if (JS_NewDeterministicRuntime(&runtime->rt, &runtime->ctx) != 0) {
     fprintf(stderr, "init: JS_NewDeterministicRuntime failed\n");
     return 1;
   }
 
-  return 0;
+  if (options->abi_manifest_hash && !options->abi_manifest_hex && !options->abi_manifest_file) {
+    fprintf(stderr, "--abi-manifest-hash requires manifest bytes\n");
+    rc = 2;
+    goto cleanup;
+  }
+
+  if (options->abi_manifest_hex && options->abi_manifest_file) {
+    fprintf(stderr, "Provide either --abi-manifest-hex or --abi-manifest-hex-file, not both\n");
+    rc = 2;
+    goto cleanup;
+  }
+
+  if (options->abi_manifest_hex || options->abi_manifest_file) {
+    const char *manifest_hex = options->abi_manifest_hex;
+
+    if (options->abi_manifest_file) {
+      manifest_hex_from_file = read_file_to_string(options->abi_manifest_file);
+      if (!manifest_hex_from_file) {
+        rc = 1;
+        goto cleanup;
+      }
+      manifest_hex = manifest_hex_from_file;
+    }
+
+    if (!options->abi_manifest_hash) {
+      fprintf(stderr, "--abi-manifest-hash is required when providing manifest bytes\n");
+      rc = 2;
+      goto cleanup;
+    }
+
+    if (!manifest_hex) {
+      fprintf(stderr, "abi manifest hex is missing\n");
+      rc = 2;
+      goto cleanup;
+    }
+
+    if (parse_hex_string(manifest_hex, &manifest_bytes, &manifest_len) != 0) {
+      rc = 2;
+      goto cleanup;
+    }
+
+    if (options->context_blob_hex &&
+        parse_hex_string(options->context_blob_hex, &context_blob, &context_blob_len) != 0) {
+      rc = 2;
+      goto cleanup;
+    }
+
+    JSDeterministicInitOptions init_opts = {
+        .manifest_bytes = manifest_bytes,
+        .manifest_size = manifest_len,
+        .manifest_hash_hex = options->abi_manifest_hash,
+        .context_blob = context_blob,
+        .context_blob_size = context_blob_len,
+        .gas_limit = options->gas_limit,
+    };
+
+    if (JS_InitDeterministicContext(runtime->ctx, &init_opts) != 0) {
+      rc = print_exception(runtime->ctx, options);
+      goto cleanup;
+    }
+  }
+
+cleanup:
+  free(manifest_bytes);
+  free(context_blob);
+  free(manifest_hex_from_file);
+
+  if (rc != 0) {
+    free_runtime(runtime);
+  }
+
+  return rc;
 }
 
 static void free_runtime(HarnessRuntime *runtime) {
@@ -380,9 +543,11 @@ static int eval_source(JSContext *ctx, const char *code, const HarnessOptions *o
 static void print_usage(const char *prog) {
   fprintf(stderr,
           "Usage:\n"
-          "  %s [--gas-limit <u64>] [--report-gas] [--gas-trace] [--dump-global <name>] --eval \"<js-source>\"\n"
+          "  %s [--gas-limit <u64>] [--report-gas] [--gas-trace] [--dump-global <name>] [--abi-manifest-hex <hex> | --abi-manifest-hex-file <path>] [--abi-manifest-hash <hex>] [--context-blob-hex <hex>] --eval \"<js-source>\"\n"
           "  %s --dv-encode --eval \"<js-source>\"\n"
-          "  %s --dv-decode <hex-string>\n",
+          "  %s --dv-decode <hex-string>\n"
+          "  %s --sha256-hex <hex-string>\n",
+          prog,
           prog,
           prog,
           prog);
@@ -396,6 +561,11 @@ static int parse_args(int argc, char **argv, HarnessOptions *opts) {
   opts->dump_global = NULL;
   opts->dv_encode = 0;
   opts->dv_decode_hex = NULL;
+  opts->abi_manifest_hex = NULL;
+  opts->abi_manifest_file = NULL;
+  opts->abi_manifest_hash = NULL;
+  opts->context_blob_hex = NULL;
+  opts->sha256_hex = NULL;
 
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--eval") == 0) {
@@ -448,6 +618,51 @@ static int parse_args(int argc, char **argv, HarnessOptions *opts) {
       continue;
     }
 
+    if (strcmp(argv[i], "--abi-manifest-hex") == 0) {
+      if (i + 1 >= argc) {
+        print_usage(argv[0]);
+        return 2;
+      }
+      opts->abi_manifest_hex = argv[++i];
+      continue;
+    }
+
+    if (strcmp(argv[i], "--abi-manifest-hex-file") == 0) {
+      if (i + 1 >= argc) {
+        print_usage(argv[0]);
+        return 2;
+      }
+      opts->abi_manifest_file = argv[++i];
+      continue;
+    }
+
+    if (strcmp(argv[i], "--abi-manifest-hash") == 0) {
+      if (i + 1 >= argc) {
+        print_usage(argv[0]);
+        return 2;
+      }
+      opts->abi_manifest_hash = argv[++i];
+      continue;
+    }
+
+    if (strcmp(argv[i], "--context-blob-hex") == 0) {
+      if (i + 1 >= argc) {
+        print_usage(argv[0]);
+        return 2;
+      }
+      opts->context_blob_hex = argv[++i];
+      continue;
+    }
+
+    if (strcmp(argv[i], "--sha256-hex") == 0) {
+      if (i + 1 >= argc) {
+        print_usage(argv[0]);
+        return 2;
+      }
+      opts->sha256_hex = argv[++i];
+      continue;
+    }
+
     if (strcmp(argv[i], "--dump-global") == 0) {
       if (i + 1 >= argc) {
         print_usage(argv[0]);
@@ -469,6 +684,14 @@ static int parse_args(int argc, char **argv, HarnessOptions *opts) {
     return 0;
   }
 
+  if (opts->sha256_hex) {
+    if (opts->code != NULL || opts->dv_encode || opts->dv_decode_hex) {
+      print_usage(argv[0]);
+      return 2;
+    }
+    return 0;
+  }
+
   if (opts->code == NULL) {
     print_usage(argv[0]);
     return 2;
@@ -484,11 +707,15 @@ int main(int argc, char **argv) {
     return parse_result;
   }
 
+  if (options.sha256_hex) {
+    return run_sha256(&options);
+  }
+
   HarnessRuntime runtime = {0};
 
-  if (init_runtime(&runtime) != 0) {
-    free_runtime(&runtime);
-    return 1;
+  int init_rc = init_runtime(&runtime, &options);
+  if (init_rc != 0) {
+    return init_rc;
   }
 
   JS_SetGasLimit(runtime.ctx, options.gas_limit);

@@ -1019,7 +1019,7 @@ Lock down the minimal host ABI surface required by the read-only evaluator.
 
 **Detailed tasks:**
 
-- [ ] Create a fixture manifest (checked into `libs/test-harness/fixtures/`) that defines:
+- [x] Create a fixture manifest (checked into `libs/test-harness/fixtures/`) that defines:
   - [x] `Host.v1.document.get(path)` (READ)
   - [x] `Host.v1.document.getCanonical(path)` (READ)
   - [x] Optional: `Host.v1.emit(value)` (EMIT) for deterministic logging/tape (recommended)
@@ -1042,7 +1042,7 @@ Lock down the minimal host ABI surface required by the read-only evaluator.
 ### T-036: Implement VM-side manifest hash validation during initialization
 
 **Phase:** P3 – Host ABI (DV + manifest + syscall)
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-033, T-010
 
 **Goal:**
@@ -1052,13 +1052,19 @@ VM receives manifest bytes at init, computes hash, and exact-matches `abi_manife
 
 **Detailed tasks:**
 
-- [ ] Implement the hash algorithm in C (matching TS).
-- [ ] Add VM init API parameters for: manifest bytes, expected hash, gas limit, and context blob.
-- [ ] On mismatch, fail deterministically with fixed error code/tag.
+- [x] Implement the hash algorithm in C (matching TS).
+- [x] Add VM init API parameters for: manifest bytes, expected hash, gas limit, and context blob.
+- [x] On mismatch, fail deterministically with fixed error code/tag.
 
 **Acceptance criteria:**
 
-- [ ] Harness test verifies correct manifest passes and incorrect hash fails deterministically.
+- [x] Harness test verifies correct manifest passes and incorrect hash fails deterministically.
+
+**Current state (P3 T-036):**
+
+- Added `quickjs-sha256.c` with a standalone SHA-256 helper and wired `JS_InitDeterministicContext` in `quickjs.c`/`quickjs.h` to validate a provided manifest (bytes + expected hash), copy it into the context, and optionally stash a context blob while setting the gas limit (defaulting to unlimited when unset). A deterministic `ManifestError` with code `ABI_MANIFEST_HASH_MISMATCH` is thrown on hash mismatch, and invalid inputs surface `TypeError` failures.
+- `JSContext` now retains the manifest bytes/hash/hex plus optional context blob and frees them on shutdown; vendor `Makefile` and harness/wasm build scripts include the new SHA source.
+- Native harness CLI accepts manifest inputs via `--abi-manifest-hex`/`--abi-manifest-hex-file` + `--abi-manifest-hash` (and optional `--context-blob-hex`), and test/golden scripts load the Host.v1 manifest fixture by default. The harness test suite asserts the mismatch case and runs all eval capability checks under manifest validation.
 
 ---
 
