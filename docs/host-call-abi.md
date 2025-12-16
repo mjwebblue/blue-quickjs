@@ -58,6 +58,8 @@ Params are wasm `i32` values (module/name as shown above) and MUST be interprete
 - Manifest-declared `err.code` values map to their manifest `tag` as usual; the two codes above are reserved for transport/envelope failures and are **not** driven by the manifest.
 - Manifest tooling/validation MUST reject manifests that attempt to declare `HOST_TRANSPORT` or `HOST_ENVELOPE_INVALID` in `error_codes`.
 
+> Implementation note: until T-039 wires the final HostError surface, the VM temporarily surfaces transport/envelope failures as `TypeError` in tests; the shape above is the intended end state.
+
 ### Reentrancy and scheduling
 
 - `host_call` is **synchronous** and **non-reentrant**. The host must not:

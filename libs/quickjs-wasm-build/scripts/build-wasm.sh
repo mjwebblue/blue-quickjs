@@ -56,11 +56,32 @@ COMMON_EMCC_FLAGS=(
   -sINITIAL_MEMORY=33554432
   -sALLOW_MEMORY_GROWTH=0
   -sSTACK_SIZE=1048576
+  -sERROR_ON_UNDEFINED_SYMBOLS=0
   -sEXPORT_NAME=QuickJSGasWasm
   -sWASM_BIGINT=1
   "-sEXPORTED_FUNCTIONS=['_qjs_eval','_qjs_free_output','_malloc','_free']"
   "-sEXPORTED_RUNTIME_METHODS=['cwrap','ccall','UTF8ToString','lengthBytesUTF8']"
 )
+
+inject_host_imports() {
+  local js_file="$1"
+  node -e "
+    const fs = require('fs');
+    const file = process.argv[1];
+    let source = fs.readFileSync(file, 'utf8');
+    if (!source.includes('var info={\"env\":wasmImports,\"wasi_snapshot_preview1\":wasmImports};')) {
+      throw new Error(\`Unable to find wasm import object in \${file} for host injection\`);
+    }
+    if (!source.includes('info[\"host\"]=')) {
+      const marker = 'var info={\"env\":wasmImports,\"wasi_snapshot_preview1\":wasmImports};';
+      source = source.replace(
+        marker,
+        \`\${marker}info[\"host\"]=Module[\"host\"]||{host_call:function(){return 0xffffffff;}};\`,
+      );
+      fs.writeFileSync(file, source);
+    }
+  " -- "${js_file}"
+}
 
 rm -rf "${OUT_DIR}"
 mkdir -p "${OUT_DIR}"
@@ -93,6 +114,7 @@ for variant in "${REQUESTED_VARIANTS[@]}"; do
   esac
 
   emcc "${emcc_args[@]}" -o "${OUT_DIR}/quickjs-eval${suffix}.js"
+  inject_host_imports "${OUT_DIR}/quickjs-eval${suffix}.js"
 
   echo "Built QuickJS wasm harness (${normalized_variant}):"
   echo "  JS:   ${OUT_DIR}/quickjs-eval${suffix}.js"

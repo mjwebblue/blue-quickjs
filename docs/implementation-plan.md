@@ -1097,7 +1097,7 @@ Define the exact Wasm import signature and buffer ownership rules implementing `
 ### T-038: Implement VM-side syscall dispatcher plumbing + reentrancy guard
 
 **Phase:** P3 – Host ABI (DV + manifest + syscall)
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-037, T-020
 
 **Goal:**
@@ -1107,18 +1107,18 @@ Add a single syscall path from VM to host with deterministic guardrails.
 
 **Detailed tasks:**
 
-- [ ] Implement `host_call` invocation layer in the fork that works in both:
-  - [ ] native harness (function pointer callback), and
-  - [ ] wasm build (imported function).
+- [x] Implement `host_call` invocation layer in the fork that works in both:
+  - [x] native harness (function pointer callback), and
+  - [x] wasm build (imported function).
 
-- [ ] Add a reentrancy guard preventing nested host calls.
+- [x] Add a reentrancy guard preventing nested host calls.
 
-- [ ] Add deterministic failures for oversized request/response.
+- [x] Add deterministic failures for oversized request/response.
 
 **Acceptance criteria:**
 
-- [ ] Native harness can register a host_call stub and receive deterministic responses.
-- [ ] Reentrancy is detected and fails deterministically.
+- [x] Native harness can register a host_call stub and receive deterministic responses.
+- [x] Reentrancy is detected and fails deterministically.
 
 ---
 

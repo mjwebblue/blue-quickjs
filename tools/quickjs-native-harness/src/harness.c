@@ -7,8 +7,15 @@
 #include <string.h>
 
 typedef struct {
+  int trigger_reentrancy;
+  int trigger_exception;
+} HostStubConfig;
+
+typedef struct {
   JSRuntime *rt;
   JSContext *ctx;
+  int host_stub_enabled;
+  HostStubConfig host_stub;
 } HarnessRuntime;
 
 typedef struct {
@@ -24,6 +31,12 @@ typedef struct {
   const char *abi_manifest_hash;
   const char *context_blob_hex;
   const char *sha256_hex;
+  const char *host_call_hex;
+  uint32_t host_call_fn_id;
+  uint32_t host_call_max_request;
+  uint32_t host_call_max_response;
+  int host_call_reentrant;
+  int host_call_exception;
 } HarnessOptions;
 
 typedef struct {
@@ -107,6 +120,47 @@ static int parse_hex_string(const char *hex, uint8_t **out, size_t *out_len) {
   *out = buf;
   *out_len = byte_len;
   return 0;
+}
+
+static uint32_t harness_host_call(JSContext *ctx,
+                                  uint32_t fn_id,
+                                  const uint8_t *req_ptr,
+                                  uint32_t req_len,
+                                  uint8_t *resp_ptr,
+                                  uint32_t resp_capacity,
+                                  void *opaque) {
+  HostStubConfig *config = (HostStubConfig *)opaque;
+
+  if (config && config->trigger_reentrancy) {
+    JSHostCallResult nested = {0};
+    uint32_t max_req = req_len > 0 ? req_len : 1;
+    uint32_t max_resp = resp_capacity > 0 ? resp_capacity : 1;
+
+    if (max_req < max_resp) {
+      max_req = max_resp;
+    }
+
+    (void)JS_HostCall(ctx, fn_id, req_ptr, req_len, max_req, max_resp, &nested);
+    if (!JS_HasException(ctx)) {
+      JS_ThrowTypeError(ctx, "host_call is already in progress");
+    }
+    return JS_HOST_CALL_TRANSPORT_ERROR;
+  }
+
+  if (config && config->trigger_exception) {
+    JS_ThrowTypeError(ctx, "host stub exception");
+    return req_len;
+  }
+
+  if (req_len > resp_capacity) {
+    return JS_HOST_CALL_TRANSPORT_ERROR;
+  }
+
+  if (req_len > 0) {
+    memcpy(resp_ptr, req_ptr, req_len);
+  }
+
+  return req_len;
 }
 
 static char *read_file_to_string(const char *path) {
@@ -241,6 +295,16 @@ static int init_runtime(HarnessRuntime *runtime, const HarnessOptions *options) 
     }
   }
 
+  if (options->host_call_hex) {
+    runtime->host_stub.trigger_reentrancy = options->host_call_reentrant;
+    runtime->host_stub.trigger_exception = options->host_call_exception;
+    runtime->host_stub_enabled = 1;
+    if (JS_SetHostCallDispatcher(runtime->rt, harness_host_call, &runtime->host_stub) != 0) {
+      rc = 1;
+      goto cleanup;
+    }
+  }
+
 cleanup:
   free(manifest_bytes);
   free(context_blob);
@@ -363,7 +427,11 @@ static int print_exception(JSContext *ctx, const HarnessOptions *options) {
     fprintf(stdout, "\n");
     JS_FreeCString(ctx, msg);
   } else {
-    fprintf(stdout, "ERROR <exception>\n");
+    fprintf(stdout, "ERROR <exception>");
+    print_gas_suffix(options, &snapshot);
+    print_state_suffix(ctx, options);
+    print_trace_suffix(options, &snapshot);
+    fprintf(stdout, "\n");
   }
   JS_FreeValue(ctx, exception);
   return 1;
@@ -486,6 +554,72 @@ static int decode_dv_hex(JSContext *ctx, const HarnessOptions *options) {
   return 0;
 }
 
+static int run_host_call(HarnessRuntime *runtime, const HarnessOptions *options) {
+  uint8_t *req_bytes = NULL;
+  size_t req_len = 0;
+  JSHostCallResult result = {0};
+  uint32_t max_req = options->host_call_max_request;
+  uint32_t max_resp = options->host_call_max_response;
+
+  if (parse_hex_string(options->host_call_hex, &req_bytes, &req_len) != 0) {
+    return 2;
+  }
+
+  if (max_req == 0) {
+    if (req_len > UINT32_MAX) {
+      free(req_bytes);
+      fprintf(stderr, "host_call request too large\n");
+      return 2;
+    }
+    max_req = req_len > 0 ? (uint32_t)req_len : 1;
+  }
+
+  if (max_resp == 0) {
+    max_resp = max_req > 0 ? max_req : 1;
+  }
+
+  if (run_gc_checkpoint(runtime->ctx, options) != 0) {
+    free(req_bytes);
+    return 1;
+  }
+
+  int rc = JS_HostCall(runtime->ctx,
+                       options->host_call_fn_id,
+                       req_bytes,
+                       req_len,
+                       max_req,
+                       max_resp,
+                       &result);
+  if (rc != 0) {
+    free(req_bytes);
+    if (run_gc_checkpoint(runtime->ctx, options) != 0) {
+      return 1;
+    }
+    return print_exception(runtime->ctx, options);
+  }
+
+  if (run_gc_checkpoint(runtime->ctx, options) != 0) {
+    free(req_bytes);
+    return 1;
+  }
+
+  HarnessSnapshot snapshot = {0};
+  snapshot.gas_remaining = JS_GetGasRemaining(runtime->ctx);
+  if (options->report_trace) {
+    snapshot.has_trace = JS_ReadGasTrace(runtime->ctx, &snapshot.trace) == 0;
+  }
+
+  fprintf(stdout, "HOSTCALL ");
+  print_hex_buffer(result.data, result.length);
+  print_gas_suffix(options, &snapshot);
+  print_state_suffix(runtime->ctx, options);
+  print_trace_suffix(options, &snapshot);
+  fprintf(stdout, "\n");
+
+  free(req_bytes);
+  return 0;
+}
+
 static int eval_source(JSContext *ctx, const char *code, const HarnessOptions *options) {
   if (run_gc_checkpoint(ctx, options) != 0) {
     return 1;
@@ -546,7 +680,9 @@ static void print_usage(const char *prog) {
           "  %s [--gas-limit <u64>] [--report-gas] [--gas-trace] [--dump-global <name>] [--abi-manifest-hex <hex> | --abi-manifest-hex-file <path>] [--abi-manifest-hash <hex>] [--context-blob-hex <hex>] --eval \"<js-source>\"\n"
           "  %s --dv-encode --eval \"<js-source>\"\n"
           "  %s --dv-decode <hex-string>\n"
+          "  %s --host-call <hex-string> [--host-fn-id <u32>] [--host-max-request <u32>] [--host-max-response <u32>] [--host-reentrant] [--host-exception] [--gas-limit <u64>] [--report-gas] [--gas-trace] [--abi-manifest-hex <hex> | --abi-manifest-hex-file <path>] [--abi-manifest-hash <hex>] [--context-blob-hex <hex>]\n"
           "  %s --sha256-hex <hex-string>\n",
+          prog,
           prog,
           prog,
           prog,
@@ -566,6 +702,12 @@ static int parse_args(int argc, char **argv, HarnessOptions *opts) {
   opts->abi_manifest_hash = NULL;
   opts->context_blob_hex = NULL;
   opts->sha256_hex = NULL;
+  opts->host_call_hex = NULL;
+  opts->host_call_fn_id = 1;
+  opts->host_call_max_request = 0;
+  opts->host_call_max_response = 0;
+  opts->host_call_reentrant = 0;
+  opts->host_call_exception = 0;
 
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--eval") == 0) {
@@ -672,12 +814,87 @@ static int parse_args(int argc, char **argv, HarnessOptions *opts) {
       continue;
     }
 
+    if (strcmp(argv[i], "--host-call") == 0) {
+      if (i + 1 >= argc) {
+        print_usage(argv[0]);
+        return 2;
+      }
+      opts->host_call_hex = argv[++i];
+      continue;
+    }
+
+    if (strcmp(argv[i], "--host-fn-id") == 0) {
+      if (i + 1 >= argc) {
+        print_usage(argv[0]);
+        return 2;
+      }
+      const char *value = argv[++i];
+      char *endptr = NULL;
+      errno = 0;
+      unsigned long parsed = strtoul(value, &endptr, 10);
+      if (errno != 0 || endptr == value || *endptr != '\0' ||
+          parsed > UINT32_MAX || parsed == 0) {
+        fprintf(stderr, "Invalid --host-fn-id: %s\n", value);
+        return 2;
+      }
+      opts->host_call_fn_id = (uint32_t)parsed;
+      continue;
+    }
+
+    if (strcmp(argv[i], "--host-max-request") == 0) {
+      if (i + 1 >= argc) {
+        print_usage(argv[0]);
+        return 2;
+      }
+      const char *value = argv[++i];
+      char *endptr = NULL;
+      errno = 0;
+      unsigned long parsed = strtoul(value, &endptr, 10);
+      if (errno != 0 || endptr == value || *endptr != '\0' ||
+          parsed > UINT32_MAX) {
+        fprintf(stderr, "Invalid --host-max-request: %s\n", value);
+        return 2;
+      }
+      opts->host_call_max_request = (uint32_t)parsed;
+      continue;
+    }
+
+    if (strcmp(argv[i], "--host-max-response") == 0) {
+      if (i + 1 >= argc) {
+        print_usage(argv[0]);
+        return 2;
+      }
+      const char *value = argv[++i];
+      char *endptr = NULL;
+      errno = 0;
+      unsigned long parsed = strtoul(value, &endptr, 10);
+      if (errno != 0 || endptr == value || *endptr != '\0' ||
+          parsed > UINT32_MAX) {
+        fprintf(stderr, "Invalid --host-max-response: %s\n", value);
+        return 2;
+      }
+      opts->host_call_max_response = (uint32_t)parsed;
+      continue;
+    }
+
+    if (strcmp(argv[i], "--host-reentrant") == 0) {
+      opts->host_call_reentrant = 1;
+      continue;
+    }
+
+    if (strcmp(argv[i], "--host-exception") == 0) {
+      opts->host_call_exception = 1;
+      continue;
+    }
+
     print_usage(argv[0]);
     return 2;
   }
 
+  const int host_call_mode = opts->host_call_hex != NULL;
+
   if (opts->dv_decode_hex) {
-    if (opts->code != NULL || opts->dv_encode) {
+    if (opts->code != NULL || opts->dv_encode || host_call_mode) {
       print_usage(argv[0]);
       return 2;
     }
@@ -685,7 +902,16 @@ static int parse_args(int argc, char **argv, HarnessOptions *opts) {
   }
 
   if (opts->sha256_hex) {
-    if (opts->code != NULL || opts->dv_encode || opts->dv_decode_hex) {
+    if (opts->code != NULL || opts->dv_encode || opts->dv_decode_hex ||
+        host_call_mode) {
+      print_usage(argv[0]);
+      return 2;
+    }
+    return 0;
+  }
+
+  if (host_call_mode) {
+    if (opts->code != NULL || opts->dv_encode) {
       print_usage(argv[0]);
       return 2;
     }
@@ -731,6 +957,8 @@ int main(int argc, char **argv) {
   int rc = 0;
   if (options.dv_decode_hex) {
     rc = decode_dv_hex(runtime.ctx, &options);
+  } else if (options.host_call_hex) {
+    rc = run_host_call(&runtime, &options);
   } else {
     if (run_gc_checkpoint(runtime.ctx, &options) != 0) {
       free_runtime(&runtime);

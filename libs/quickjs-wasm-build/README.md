@@ -10,6 +10,16 @@ Early Emscripten build of the deterministic QuickJS fork with gas metering.
 
 The ESM loader exports a `QuickJSGasWasm` factory; the harness exports `qjs_eval(code, gasLimit)` and `qjs_free_output(ptr)`.
 
+The wasm module expects a `host.host_call` import. When you don't have a dispatcher wired yet, pass a stub that returns the transport sentinel:
+
+```ts
+const module = await QuickJSGasWasm({
+  host: {
+    host_call: () => 0xffffffff >>> 0,
+  },
+});
+```
+
 ## Running unit tests
 
 Run `pnpm nx test quickjs-wasm-build` to execute the Vitest suite (path helper assertions).

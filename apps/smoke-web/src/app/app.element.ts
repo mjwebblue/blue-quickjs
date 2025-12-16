@@ -15,6 +15,8 @@ interface HarnessResult {
   raw: string;
 }
 
+const HOST_TRANSPORT_SENTINEL = 0xffffffff >>> 0;
+
 function parseHarnessOutput(raw: string): HarnessResult {
   const trimmed = raw.trim();
   const match =
@@ -53,7 +55,11 @@ function resultsMatch(actual: HarnessResult, expected: HarnessResult): boolean {
 }
 
 async function createWasmRunner() {
-  const module = await QuickJSGasWasm();
+  const module = await QuickJSGasWasm({
+    host: {
+      host_call: () => HOST_TRANSPORT_SENTINEL,
+    },
+  });
   const evalFn = module.cwrap('qjs_eval', 'number', ['string', 'bigint']);
   const freeFn = module.cwrap('qjs_free_output', null, ['number']);
   return (code: string, gasLimit: bigint) => {

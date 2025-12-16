@@ -33,6 +33,22 @@ assert_output() {
   fi
 }
 
+assert_host_call() {
+  local name="$1"
+  local expected="$2"
+  shift 2
+
+  local output
+  output="$("${BIN}" "${COMMON_ARGS[@]}" "$@" || true)"
+
+  if [[ "${output}" != "${expected}" ]]; then
+    echo "Harness host_call mismatch for '${name}'" >&2
+    echo " expected: ${expected}" >&2
+    echo "   actual: ${output}" >&2
+    exit 1
+  fi
+}
+
 assert_sha() {
   local name="$1"
   local hex="$2"
@@ -155,6 +171,11 @@ assert_output "Promise disabled" "Promise.resolve(1)" "ERROR TypeError: Promise 
 assert_output "queueMicrotask missing" "typeof queueMicrotask" "RESULT \"undefined\""
 assert_output "Host descriptor" "${host_descriptor_js}" "RESULT {\"configurable\":false,\"enumerable\":false,\"writable\":false,\"hostType\":\"object\",\"v1Type\":\"object\",\"v1NullProto\":true}"
 assert_output "capability snapshot" "${capability_snapshot_js}" "RESULT {\"eval\":{\"ok\":false,\"error\":\"TypeError: eval is disabled in deterministic mode\"},\"Function\":{\"ok\":false,\"error\":\"TypeError: Function is disabled in deterministic mode\"},\"RegExp\":{\"ok\":false,\"error\":\"TypeError: RegExp is disabled in deterministic mode\"},\"Proxy\":{\"ok\":false,\"error\":\"TypeError: Proxy is disabled in deterministic mode\"},\"Promise\":{\"ok\":false,\"error\":\"TypeError: Promise is disabled in deterministic mode\"},\"MathRandom\":{\"ok\":false,\"error\":\"TypeError: Math.random is disabled in deterministic mode\"},\"Date\":{\"ok\":true,\"value\":\"undefined\"},\"setTimeout\":{\"ok\":true,\"value\":\"undefined\"},\"ArrayBuffer\":{\"ok\":false,\"error\":\"TypeError: ArrayBuffer is disabled in deterministic mode\"},\"SharedArrayBuffer\":{\"ok\":false,\"error\":\"TypeError: SharedArrayBuffer is disabled in deterministic mode\"},\"DataView\":{\"ok\":false,\"error\":\"TypeError: DataView is disabled in deterministic mode\"},\"Uint8Array\":{\"ok\":false,\"error\":\"TypeError: Typed arrays are disabled in deterministic mode\"},\"Atomics\":{\"ok\":false,\"error\":\"TypeError: Atomics is disabled in deterministic mode\"},\"WebAssembly\":{\"ok\":false,\"error\":\"TypeError: WebAssembly is disabled in deterministic mode\"},\"consoleLog\":{\"ok\":false,\"error\":\"TypeError: console is disabled in deterministic mode\"},\"print\":{\"ok\":false,\"error\":\"TypeError: print is disabled in deterministic mode\"},\"globalOrder\":{\"ok\":true,\"value\":[\"console\",\"print\",\"Host\"]},\"hostImmutable\":{\"ok\":true,\"value\":{\"sameRef\":true,\"hasV1\":true,\"added\":false,\"desc\":{\"value\":{},\"writable\":false,\"enumerable\":false,\"configurable\":false},\"protoNull\":true,\"v1ProtoNull\":true,\"hostIsExtensible\":false,\"hostV1Extensible\":false}}}"
+assert_host_call "host_call echo" "HOSTCALL 0a0b0c GAS remaining=100 used=0" --host-call "0a0b0c" --gas-limit 100 --report-gas
+assert_host_call "host_call request limit" "ERROR TypeError: host_call request exceeds max_request_bytes" --host-call "010203" --host-max-request 2
+assert_host_call "host_call response limit" "ERROR TypeError: host_call transport failed" --host-call "0a0b0c" --host-max-request 3 --host-max-response 2
+assert_host_call "host_call reentrancy guard" "ERROR TypeError: host_call is already in progress" --host-call "aa" --host-reentrant
+assert_host_call "host_call dispatcher exception" "ERROR TypeError: host stub exception" --host-call "aa" --host-exception
 
 node "${SCRIPT_DIR}/gas-goldens.mjs"
 node "${SCRIPT_DIR}/dv-parity.mjs"

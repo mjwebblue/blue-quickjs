@@ -78,6 +78,7 @@ const wasmVariantEnv = process.env.QJS_WASM_VARIANT?.toLowerCase();
 const wasmVariant: QuickjsWasmVariant =
   wasmVariantEnv === 'wasm64' ? 'wasm64' : 'wasm32';
 const useNativeBaseline = wasmVariant === 'wasm64';
+const HOST_TRANSPORT_SENTINEL = 0xffffffff >>> 0;
 
 const wasm32Expectations: Record<string, HarnessResult> = {
   'zero-precharge': {
@@ -130,7 +131,11 @@ beforeAll(async () => {
     );
   }
   const moduleFactory = (await import(pathToFileURL(loaderPath).href)).default;
-  wasmModule = await moduleFactory();
+  wasmModule = await moduleFactory({
+    host: {
+      host_call: () => HOST_TRANSPORT_SENTINEL,
+    },
+  });
   wasmEval = wasmModule.cwrap('qjs_eval', 'number', ['string', 'bigint']);
   wasmFree = wasmModule.cwrap('qjs_free_output', null, ['number']);
 });
