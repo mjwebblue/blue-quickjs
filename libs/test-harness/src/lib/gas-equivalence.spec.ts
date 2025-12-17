@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describe, expect, test, beforeAll } from 'vitest';
 import {
+  type QuickjsWasmBuildType,
   type QuickjsWasmVariant,
   getQuickjsWasmArtifacts,
 } from '@blue-quickjs/quickjs-wasm-build';
@@ -77,6 +78,9 @@ const cases = [
 const wasmVariantEnv = process.env.QJS_WASM_VARIANT?.toLowerCase();
 const wasmVariant: QuickjsWasmVariant =
   wasmVariantEnv === 'wasm64' ? 'wasm64' : 'wasm32';
+const wasmBuildTypeEnv = process.env.QJS_WASM_BUILD_TYPE?.toLowerCase();
+const wasmBuildType: QuickjsWasmBuildType =
+  wasmBuildTypeEnv === 'debug' ? 'debug' : 'release';
 const useNativeBaseline = wasmVariant === 'wasm64';
 const HOST_TRANSPORT_SENTINEL = 0xffffffff >>> 0;
 
@@ -119,15 +123,16 @@ const wasm32Expectations: Record<string, HarnessResult> = {
   },
 };
 
-let wasmEval: ((code: string, gasLimit: bigint) => number) | null = null;
-let wasmFree: ((ptr: number) => void) | null = null;
+let wasmEval: ((code: string, gasLimit: bigint) => number | bigint) | null =
+  null;
+let wasmFree: ((ptr: number | bigint) => void) | null = null;
 let wasmModule: any = null;
 
 beforeAll(async () => {
-  const { loaderPath } = getQuickjsWasmArtifacts(wasmVariant);
+  const { loaderPath } = getQuickjsWasmArtifacts(wasmVariant, wasmBuildType);
   if (!existsSync(loaderPath)) {
     throw new Error(
-      `Wasm loader not found at ${loaderPath}. Build quickjs-wasm-build with WASM_VARIANTS=${wasmVariant}`,
+      `Wasm loader not found at ${loaderPath}. Build quickjs-wasm-build with WASM_VARIANTS=${wasmVariant} WASM_BUILD_TYPES=${wasmBuildType}`,
     );
   }
   const moduleFactory = (await import(pathToFileURL(loaderPath).href)).default;
@@ -136,8 +141,10 @@ beforeAll(async () => {
       host_call: () => HOST_TRANSPORT_SENTINEL,
     },
   });
-  wasmEval = wasmModule.cwrap('qjs_eval', 'number', ['string', 'bigint']);
-  wasmFree = wasmModule.cwrap('qjs_free_output', null, ['number']);
+  const ptrReturnType = wasmVariant === 'wasm64' ? 'bigint' : 'number';
+  const ptrArgType = wasmVariant === 'wasm64' ? 'bigint' : 'number';
+  wasmEval = wasmModule.cwrap('qjs_eval', ptrReturnType, ['string', 'bigint']);
+  wasmFree = wasmModule.cwrap('qjs_free_output', null, [ptrArgType]);
 });
 
 function parseHarnessOutput(output: string): HarnessResult {
@@ -180,7 +187,14 @@ function runWasm(code: string, gasLimit: bigint): HarnessResult {
     throw new Error('Wasm harness not initialized');
   }
   const ptr = wasmEval(code, gasLimit);
-  const raw = wasmModule.UTF8ToString(ptr);
+  const ptrNumber =
+    typeof ptr === 'bigint'
+      ? Number(ptr <= BigInt(Number.MAX_SAFE_INTEGER) ? ptr : BigInt(0))
+      : ptr;
+  if (typeof ptr === 'bigint' && ptr > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error('Pointer exceeds JS safe integer range');
+  }
+  const raw = wasmModule.UTF8ToString(ptrNumber);
   wasmFree(ptr);
   return parseHarnessOutput(raw);
 }

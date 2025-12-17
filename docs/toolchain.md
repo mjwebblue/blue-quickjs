@@ -33,3 +33,4 @@ Notes:
 - Memory is fixed: `-sINITIAL_MEMORY=33554432` and `-sMAXIMUM_MEMORY=33554432` with `-sALLOW_MEMORY_GROWTH=0`, a 1 MiB stack, and `-sALLOW_TABLE_GROWTH=0`.
 - Host surface only: the Emscripten filesystem is stripped (`-sFILESYSTEM=0`), and the environment is limited to `node,web` with `-sNO_EXIT_RUNTIME=1`; no FS/network syscalls are available to the wasm module.
 - Built artifacts record these settings in `dist/quickjs-wasm-build.metadata.json` under `build.memory` and `build.determinism` for auditability.
+- By default the build emits both release and debug wasm32 artifacts; set `WASM_BUILD_TYPES=release` to skip debug. Debug builds add Emscripten assertions/stack-overflow checks while keeping the same deterministic VM semantics.

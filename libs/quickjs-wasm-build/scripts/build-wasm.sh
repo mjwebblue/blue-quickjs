@@ -8,6 +8,7 @@ QJS_DIR="${REPO_ROOT}/vendor/quickjs"
 OUT_DIR="${PROJECT_ROOT}/dist"
 METADATA_BASENAME="quickjs-wasm-build.metadata.json"
 VARIANTS_RAW="${WASM_VARIANTS:-wasm32}"
+BUILD_TYPES_RAW="${WASM_BUILD_TYPES:-release,debug}"
 WASM_INITIAL_MEMORY_BYTES=$((32 * 1024 * 1024))
 WASM_STACK_SIZE_BYTES=$((1 * 1024 * 1024))
 ALLOW_MEMORY_GROWTH=0
@@ -62,9 +63,8 @@ SRC_FILES=(
   "${PROJECT_ROOT}/src/wasm/quickjs_wasm.c"
 )
 
-COMMON_EMCC_FLAGS=(
+BASE_EMCC_FLAGS=(
   -std=gnu11
-  -O2
   -Wall
   -Wextra
   -Wno-unused-parameter
@@ -77,7 +77,6 @@ COMMON_EMCC_FLAGS=(
   -D_GNU_SOURCE
   "-DCONFIG_VERSION=\"${VERSION}\""
   -sDETERMINISTIC=1
-  -sASSERTIONS=0
   -sMODULARIZE=1
   -sEXPORT_ES6=1
   -sENVIRONMENT=node,web
@@ -94,6 +93,17 @@ COMMON_EMCC_FLAGS=(
   -sWASM_BIGINT=1
   "-sEXPORTED_FUNCTIONS=['_qjs_eval','_qjs_free_output','_malloc','_free']"
 "-sEXPORTED_RUNTIME_METHODS=['cwrap','ccall','UTF8ToString','lengthBytesUTF8']"
+)
+
+RELEASE_FLAGS=(
+  -O2
+  -sASSERTIONS=0
+)
+
+DEBUG_FLAGS=(
+  -O2
+  -sASSERTIONS=2
+  -sSTACK_OVERFLOW_CHECK=2
 )
 
 BUILT_VARIANTS=()
@@ -127,12 +137,16 @@ if [[ ${#REQUESTED_VARIANTS[@]} -eq 0 ]]; then
   REQUESTED_VARIANTS=("wasm32")
 fi
 
+BUILD_TYPES_RAW_CLEAN="${BUILD_TYPES_RAW//[[:space:]]/}"
+IFS=',' read -ra REQUESTED_BUILD_TYPES <<< "${BUILD_TYPES_RAW_CLEAN}"
+if [[ ${#REQUESTED_BUILD_TYPES[@]} -eq 0 ]]; then
+  REQUESTED_BUILD_TYPES=("release")
+fi
+
 for variant in "${REQUESTED_VARIANTS[@]}"; do
   normalized_variant="$(echo "${variant}" | tr '[:upper:]' '[:lower:]')"
   suffix=""
   declare -a variant_flags=()
-  emcc_args=("${SRC_FILES[@]}" "${COMMON_EMCC_FLAGS[@]}")
-  variant_flags_str=""
 
   case "${normalized_variant}" in
     wasm32)
@@ -142,7 +156,6 @@ for variant in "${REQUESTED_VARIANTS[@]}"; do
       suffix="-wasm64"
       variant_flags+=(-sMEMORY64=1)
       normalized_variant="wasm64"
-      emcc_args+=("${variant_flags[@]}")
       ;;
     *)
       echo "Unknown WASM variant '${variant}'. Expected wasm32 or wasm64." >&2
@@ -150,17 +163,51 @@ for variant in "${REQUESTED_VARIANTS[@]}"; do
       ;;
   esac
 
-  emcc "${emcc_args[@]}" -o "${OUT_DIR}/quickjs-eval${suffix}.js"
-  inject_host_imports "${OUT_DIR}/quickjs-eval${suffix}.js"
-
+  variant_flags_str=""
   if [[ ${#variant_flags[@]} -gt 0 ]]; then
     variant_flags_str="$(IFS=','; echo "${variant_flags[*]}")"
   fi
 
-  BUILT_VARIANTS+=("${normalized_variant}:${OUT_DIR}/quickjs-eval${suffix}.wasm:${OUT_DIR}/quickjs-eval${suffix}.js:${variant_flags_str}")
-  echo "Built QuickJS wasm harness (${normalized_variant}):"
-  echo "  JS:   ${OUT_DIR}/quickjs-eval${suffix}.js"
-  echo "  Wasm: ${OUT_DIR}/quickjs-eval${suffix}.wasm"
+  for build_type in "${REQUESTED_BUILD_TYPES[@]}"; do
+    normalized_build_type="$(echo "${build_type}" | tr '[:upper:]' '[:lower:]')"
+    declare -a build_type_flags=()
+    build_suffix=""
+
+    case "${normalized_build_type}" in
+      release)
+        build_type_flags+=("${RELEASE_FLAGS[@]}")
+        ;;
+      debug)
+        build_type_flags+=("${DEBUG_FLAGS[@]}")
+        build_suffix="-debug"
+        ;;
+      *)
+        echo "Unknown WASM build type '${build_type}'. Expected release or debug." >&2
+        exit 1
+        ;;
+    esac
+
+    emcc_args=("${SRC_FILES[@]}" "${BASE_EMCC_FLAGS[@]}")
+    if [[ ${#variant_flags[@]} -gt 0 ]]; then
+      emcc_args+=("${variant_flags[@]}")
+    fi
+    if [[ ${#build_type_flags[@]} -gt 0 ]]; then
+      emcc_args+=("${build_type_flags[@]}")
+    fi
+
+    emcc "${emcc_args[@]}" -o "${OUT_DIR}/quickjs-eval${suffix}${build_suffix}.js"
+    inject_host_imports "${OUT_DIR}/quickjs-eval${suffix}${build_suffix}.js"
+
+    build_flags_str=""
+    if [[ ${#build_type_flags[@]} -gt 0 ]]; then
+      build_flags_str="$(IFS=','; echo "${build_type_flags[*]}")"
+    fi
+
+    BUILT_VARIANTS+=("${normalized_variant}:${normalized_build_type}:${OUT_DIR}/quickjs-eval${suffix}${build_suffix}.wasm:${OUT_DIR}/quickjs-eval${suffix}${build_suffix}.js:${variant_flags_str}:${build_flags_str}")
+    echo "Built QuickJS wasm harness (${normalized_variant}/${normalized_build_type}):"
+    echo "  JS:   ${OUT_DIR}/quickjs-eval${suffix}${build_suffix}.js"
+    echo "  Wasm: ${OUT_DIR}/quickjs-eval${suffix}${build_suffix}.wasm"
+  done
 done
 
 if [[ ${#BUILT_VARIANTS[@]} -eq 0 ]]; then
@@ -209,16 +256,31 @@ try {
 
 const variants = variantArgs
   .map((entry) => {
-    const [variant, wasmPath, loaderPath, variantFlagsRaw = ''] = entry.split(':');
-    if (!variant || !wasmPath || !loaderPath) {
+    const [
+      variant,
+      buildType,
+      wasmPath,
+      loaderPath,
+      variantFlagsRaw = '',
+      buildTypeFlagsRaw = '',
+    ] = entry.split(':');
+    if (!variant || !buildType || !wasmPath || !loaderPath) {
       throw new Error(`Invalid variant entry: ${entry}`);
     }
     const variantFlags = variantFlagsRaw
       ? variantFlagsRaw.split(',').map((flag) => flag.trim()).filter(Boolean)
       : [];
-    return { variant, wasmPath, loaderPath, variantFlags };
+    const buildTypeFlags = buildTypeFlagsRaw
+      ? buildTypeFlagsRaw.split(',').map((flag) => flag.trim()).filter(Boolean)
+      : [];
+    return { variant, buildType, wasmPath, loaderPath, variantFlags, buildTypeFlags };
   })
-  .sort((a, b) => a.variant.localeCompare(b.variant));
+  .sort((a, b) => {
+    if (a.variant === b.variant) {
+      return a.buildType.localeCompare(b.buildType);
+    }
+    return a.variant.localeCompare(b.variant);
+  });
 
 const variantsMeta = {};
 for (const entry of variants) {
@@ -232,21 +294,32 @@ for (const entry of variants) {
     sha256: sha256File(entry.loaderPath),
     size: statSize(entry.loaderPath),
   };
-  variantsMeta[entry.variant] = {
+  if (!variantsMeta[entry.variant]) {
+    variantsMeta[entry.variant] = {};
+  }
+  variantsMeta[entry.variant][entry.buildType] = {
+    buildType: entry.buildType,
     engineBuildHash: wasm.sha256,
     wasm,
     loader,
     variantFlags: entry.variantFlags,
+    buildFlags: entry.buildTypeFlags,
   };
 }
 
 let engineBuildHash = null;
-if (variantsMeta.wasm32?.engineBuildHash) {
-  engineBuildHash = variantsMeta.wasm32.engineBuildHash;
-} else if (variantsMeta.wasm64?.engineBuildHash) {
-  engineBuildHash = variantsMeta.wasm64.engineBuildHash;
+if (variantsMeta.wasm32?.release?.engineBuildHash) {
+  engineBuildHash = variantsMeta.wasm32.release.engineBuildHash;
+} else if (variantsMeta.wasm32) {
+  const firstBuildType = Object.values(variantsMeta.wasm32)[0];
+  engineBuildHash = firstBuildType?.engineBuildHash ?? null;
+} else if (variantsMeta.wasm64) {
+  const firstBuildType = Object.values(variantsMeta.wasm64)[0];
+  engineBuildHash = firstBuildType?.engineBuildHash ?? null;
 } else if (variants.length > 0) {
-  engineBuildHash = variantsMeta[variants[0].variant].engineBuildHash;
+  const first = variants[0];
+  engineBuildHash =
+    variantsMeta[first.variant]?.[first.buildType]?.engineBuildHash ?? null;
 }
 
 const buildMemory = {

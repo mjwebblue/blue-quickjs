@@ -17,6 +17,9 @@
           "env": "WASM_VARIANTS"
         },
         {
+          "env": "WASM_BUILD_TYPES"
+        },
+        {
           "env": "SOURCE_DATE_EPOCH"
         }
       ],

@@ -57,9 +57,11 @@ See `docs/toolchain.md` for details and CI cache notes.
 
 `libs/quickjs-wasm-build` compiles the deterministic QuickJS fork + wasm harness and emits:
 
-- `libs/quickjs-wasm-build/dist/quickjs-eval.{js,wasm}` (wasm32, canonical)
-- Optional debug variant (memory64): set `WASM_VARIANTS=wasm32,wasm64` to also emit
-  `quickjs-eval-wasm64.{js,wasm}`.
+- Release + debug artifacts for wasm32 (canonical):
+  `libs/quickjs-wasm-build/dist/quickjs-eval{,-debug}.{js,wasm}`
+- Optional memory64 builds: set `WASM_VARIANTS=wasm32,wasm64` to also emit
+  `quickjs-eval-wasm64{,-debug}.{js,wasm}`.
+- Control build types with `WASM_BUILD_TYPES=release,debug` (defaults to both).
 
 Build:
 
