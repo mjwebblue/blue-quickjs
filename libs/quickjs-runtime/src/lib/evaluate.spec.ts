@@ -61,8 +61,10 @@ describe('evaluate', () => {
     if (result.ok) {
       throw new Error('expected VM failure');
     }
-    expect(result.errorType).toBe('vm-error');
-    expect(result.message).toMatch(/document/i);
+    expect(result.type).toBe('vm-error');
+    expect(result.error.kind).toBe('js-exception');
+    expect(result.error.code).toBe('JS_EXCEPTION');
+    expect(result.error.message).toMatch(/document/i);
     expect(handlers.document.get).not.toHaveBeenCalled();
   });
 
@@ -80,8 +82,64 @@ describe('evaluate', () => {
       throw new Error('expected invalid output');
     }
 
-    expect(result.errorType).toBe('invalid-output');
+    expect(result.type).toBe('invalid-output');
+    expect(result.error.code).toBe('INVALID_OUTPUT');
     expect(result.message).toMatch(/non-JSON/i);
+  });
+
+  it('maps HostError failures to code/tag using the manifest', async () => {
+    const handlers = createHandlers({
+      document: {
+        get: vi.fn(() => ({
+          err: { code: 'NOT_FOUND', tag: 'host/not_found' },
+          units: 2,
+        })),
+      },
+    });
+
+    const result = await evaluate({
+      program: BASE_PROGRAM,
+      input: BASE_INPUT,
+      gasLimit: TEST_GAS_LIMIT,
+      manifest: HOST_V1_MANIFEST,
+      handlers,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error('expected host error');
+    }
+
+    expect(result.type).toBe('vm-error');
+    expect(result.error.kind).toBe('host-error');
+    if (result.error.kind !== 'host-error') {
+      throw new Error('expected host-error');
+    }
+    expect(result.error.code).toBe('NOT_FOUND');
+    expect(result.error.tag).toBe('host/not_found');
+  });
+
+  it('surfaces OutOfGas as a stable code/tag', async () => {
+    const result = await evaluate({
+      program: { ...BASE_PROGRAM, code: 'let n = 0; while (true) { n += 1; }' },
+      input: BASE_INPUT,
+      gasLimit: 50n,
+      manifest: HOST_V1_MANIFEST,
+      handlers: createHandlers(),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error('expected OOG');
+    }
+
+    expect(result.type).toBe('vm-error');
+    expect(result.error.kind).toBe('out-of-gas');
+    if (result.error.kind !== 'out-of-gas') {
+      throw new Error('expected out-of-gas');
+    }
+    expect(result.error.code).toBe('OOG');
+    expect(result.error.tag).toBe('vm/out_of_gas');
   });
 
   it('rejects engine build hash mismatches', async () => {

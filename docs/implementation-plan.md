@@ -1603,7 +1603,7 @@ Provide a single-call deterministic evaluator entrypoint suitable for embedding 
 ### T-065: Stable error mapping (VM OOG vs HostError vs DV/manifest errors)
 
 **Phase:** P5 – TypeScript runtime SDK
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-064
 
 **Goal:**
@@ -1613,13 +1613,19 @@ Expose stable error objects in TS without leaking host-specific data.
 
 **Detailed tasks:**
 
-- [ ] Define structured error types with stable `code/tag` fields.
-- [ ] Map VM-thrown deterministic errors into these types.
-- [ ] Ensure stack traces are not part of determinism comparisons (optionally available only in debug mode).
+- [x] Define structured error types with stable `code/tag` fields.
+- [x] Map VM-thrown deterministic errors into these types.
+- [x] Ensure stack traces are not part of determinism comparisons (optionally available only in debug mode).
 
 **Acceptance criteria:**
 
-- [ ] Errors match by code/tag across Node/browser for the same failure.
+- [x] Errors match by code/tag across Node/browser for the same failure.
+
+**Current state (P5 T-065):**
+
+- Added stable error typing for `evaluate` covering host errors (manifest-derived codes/tags plus transport/envelope sentinels), OutOfGas, manifest errors, JS exceptions, and invalid outputs; stack traces remain excluded.
+- Errors now surface deterministic `{type, code, tag, message}` payloads with manifest-driven lookup for HostError codes; invalid outputs return a fixed `INVALID_OUTPUT` code.
+- Tests assert host error mapping, OutOfGas tagging, JS exception classification, and invalid-output handling across the runtime SDK.
 
 ---
 

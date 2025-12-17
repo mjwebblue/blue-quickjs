@@ -22,6 +22,12 @@ import {
   type RuntimeInstance,
   createRuntime,
 } from './runtime.js';
+import {
+  createInvalidOutputError,
+  mapVmError,
+  type EvaluateInvalidOutputDetail,
+  type EvaluateVmErrorDetail,
+} from './evaluate-errors.js';
 
 export interface EvaluateOptions
   extends RuntimeArtifactSelection, HostDispatcherOptions {
@@ -55,17 +61,28 @@ export type EvaluateSuccess = {
   gasTrace?: GasTrace;
 };
 
-export type EvaluateError = {
+type EvaluateFailureBase = {
   ok: false;
-  errorType: 'vm-error' | 'invalid-output';
+  type: 'vm-error' | 'invalid-output';
   message: string;
   gasUsed: bigint;
   gasRemaining: bigint;
   raw: string;
   tape?: HostTapeRecord[];
   gasTrace?: GasTrace;
-  cause?: unknown;
 };
+
+export type EvaluateVmError = EvaluateFailureBase & {
+  type: 'vm-error';
+  error: EvaluateVmErrorDetail;
+};
+
+export type EvaluateInvalidOutputError = EvaluateFailureBase & {
+  type: 'invalid-output';
+  error: EvaluateInvalidOutputDetail;
+};
+
+export type EvaluateError = EvaluateVmError | EvaluateInvalidOutputError;
 
 export type EvaluateResult = EvaluateSuccess | EvaluateError;
 
@@ -124,10 +141,12 @@ export async function evaluate(
       : undefined;
 
     if (parsed.kind === 'error') {
+      const error = mapVmError(parsed.payload, runtime.manifest);
       return {
         ok: false,
-        errorType: 'vm-error',
-        message: parsed.payload,
+        type: 'vm-error',
+        message: error.message,
+        error,
         gasUsed: parsed.gasUsed,
         gasRemaining: parsed.gasRemaining,
         raw,
@@ -138,16 +157,17 @@ export async function evaluate(
 
     const decoded = decodeResultPayload(parsed.payload, options.outputDvLimits);
     if (decoded.kind === 'error') {
+      const error = createInvalidOutputError(decoded.message, decoded.cause);
       return {
         ok: false,
-        errorType: 'invalid-output',
-        message: decoded.message,
+        type: 'invalid-output',
+        message: error.message,
+        error,
         gasUsed: parsed.gasUsed,
         gasRemaining: parsed.gasRemaining,
         raw,
         tape,
         gasTrace: trace,
-        cause: decoded.cause,
       };
     }
 
@@ -456,3 +476,8 @@ function assertEngineBuildHash(
     );
   }
 }
+
+export type {
+  EvaluateInvalidOutputDetail,
+  EvaluateVmErrorDetail,
+} from './evaluate-errors.js';
