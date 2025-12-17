@@ -1184,7 +1184,7 @@ static int parse_args(int argc, char **argv, HarnessOptions *opts) {
   const int host_call_mode = opts->host_call_hex != NULL || opts->host_call_parse_envelope;
 
   if (opts->dv_decode_hex) {
-    if (opts->code != NULL || opts->dv_encode || host_call_mode) {
+    if (opts->code != NULL || opts->dv_encode || host_call_mode || opts->sha256_hex) {
       print_usage(argv[0]);
       return 2;
     }

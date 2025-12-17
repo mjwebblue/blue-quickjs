@@ -74,6 +74,15 @@ assert_sha() {
   fi
 }
 
+assert_reject() {
+  local name="$1"
+  shift
+  if "${BIN}" "$@" >/dev/null 2>&1; then
+    echo "Expected failure for '${name}', but command succeeded" >&2
+    exit 1
+  fi
+}
+
 host_descriptor_js="$(cat <<'EOF'
 (() => {
   const desc = Object.getOwnPropertyDescriptor(globalThis, 'Host');
@@ -237,6 +246,7 @@ assert_output "manifest hash mismatch" "1 + 1" "ERROR ManifestError: abi manifes
 assert_sha "sha256 empty" "" "SHA256 ${SHA_EMPTY}"
 assert_sha "sha256 abc" "616263" "SHA256 ${SHA_ABC}"
 assert_sha "sha256 long" "6162636462636465636465666465666765666768666768696768696a68696a6b696a6b6c6a6b6c6d6b6c6d6e6c6d6e6f6d6e6f706e6f7071" "SHA256 ${SHA_LONG}"
+assert_reject "dv-decode with sha256" --dv-decode "a0" --sha256-hex "${SHA_EMPTY}"
 assert_output "eval disabled" "eval('1 + 1')" "ERROR TypeError: eval is disabled in deterministic mode"
 assert_output "Function disabled" "(new Function('return 7'))()" "ERROR TypeError: Function is disabled in deterministic mode"
 assert_output "Function ctor via Function.prototype.constructor" "(() => { const RealFunction = (function () {}).constructor; return RealFunction('return 3')(); })()" "ERROR TypeError: Function constructor is disabled in deterministic mode"
