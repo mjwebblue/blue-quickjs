@@ -1,16 +1,22 @@
 import {
   QUICKJS_WASM64_BASENAME,
   QUICKJS_WASM64_LOADER_BASENAME,
+  QUICKJS_WASM64_DEBUG_BASENAME,
+  QUICKJS_WASM64_DEBUG_LOADER_BASENAME,
   QUICKJS_WASM_BASENAME,
   QUICKJS_WASM_LOADER_BASENAME,
+  QUICKJS_WASM_DEBUG_BASENAME,
+  QUICKJS_WASM_DEBUG_LOADER_BASENAME,
   QUICKJS_WASM_METADATA_BASENAME,
   type QuickjsWasmBuildMetadata,
   type QuickjsWasmBuildVariantMetadata,
+  type QuickjsWasmBuildType,
   type QuickjsWasmVariant,
 } from '@blue-quickjs/quickjs-wasm-build';
 
 export interface QuickjsWasmArtifact {
   variant: QuickjsWasmVariant;
+  buildType: QuickjsWasmBuildType;
   wasmUrl: URL;
   loaderUrl: URL;
   variantMetadata: QuickjsWasmBuildVariantMetadata;
@@ -20,12 +26,14 @@ export type {
   QuickjsWasmBuildArtifactInfo,
   QuickjsWasmBuildMetadata,
   QuickjsWasmBuildVariantMetadata,
+  QuickjsWasmBuildType,
   QuickjsWasmVariant,
 } from '@blue-quickjs/quickjs-wasm-build';
 
 const PACKAGE_WASM_DIR = './wasm';
 const FALLBACK_BUILD_DIR = '../../../quickjs-wasm-build/dist';
 const DEFAULT_VARIANT: QuickjsWasmVariant = 'wasm32';
+const DEFAULT_BUILD_TYPE: QuickjsWasmBuildType = 'release';
 
 const PACKAGE_ASSET_URLS: Record<string, URL> = {
   [QUICKJS_WASM_METADATA_BASENAME]: new URL(
@@ -40,6 +48,14 @@ const PACKAGE_ASSET_URLS: Record<string, URL> = {
     `${PACKAGE_WASM_DIR}/${QUICKJS_WASM_LOADER_BASENAME}`,
     import.meta.url,
   ),
+  [QUICKJS_WASM_DEBUG_BASENAME]: new URL(
+    `${PACKAGE_WASM_DIR}/${QUICKJS_WASM_DEBUG_BASENAME}`,
+    import.meta.url,
+  ),
+  [QUICKJS_WASM_DEBUG_LOADER_BASENAME]: new URL(
+    `${PACKAGE_WASM_DIR}/${QUICKJS_WASM_DEBUG_LOADER_BASENAME}`,
+    import.meta.url,
+  ),
   [QUICKJS_WASM64_BASENAME]: new URL(
     `${PACKAGE_WASM_DIR}/${QUICKJS_WASM64_BASENAME}`,
     import.meta.url,
@@ -48,19 +64,39 @@ const PACKAGE_ASSET_URLS: Record<string, URL> = {
     `${PACKAGE_WASM_DIR}/${QUICKJS_WASM64_LOADER_BASENAME}`,
     import.meta.url,
   ),
+  [QUICKJS_WASM64_DEBUG_BASENAME]: new URL(
+    `${PACKAGE_WASM_DIR}/${QUICKJS_WASM64_DEBUG_BASENAME}`,
+    import.meta.url,
+  ),
+  [QUICKJS_WASM64_DEBUG_LOADER_BASENAME]: new URL(
+    `${PACKAGE_WASM_DIR}/${QUICKJS_WASM64_DEBUG_LOADER_BASENAME}`,
+    import.meta.url,
+  ),
 };
 
 const VARIANT_FILENAMES: Record<
   QuickjsWasmVariant,
-  { wasm: string; loader: string }
+  Record<QuickjsWasmBuildType, { wasm: string; loader: string }>
 > = {
   wasm32: {
-    wasm: QUICKJS_WASM_BASENAME,
-    loader: QUICKJS_WASM_LOADER_BASENAME,
+    release: {
+      wasm: QUICKJS_WASM_BASENAME,
+      loader: QUICKJS_WASM_LOADER_BASENAME,
+    },
+    debug: {
+      wasm: QUICKJS_WASM_DEBUG_BASENAME,
+      loader: QUICKJS_WASM_DEBUG_LOADER_BASENAME,
+    },
   },
   wasm64: {
-    wasm: QUICKJS_WASM64_BASENAME,
-    loader: QUICKJS_WASM64_LOADER_BASENAME,
+    release: {
+      wasm: QUICKJS_WASM64_BASENAME,
+      loader: QUICKJS_WASM64_LOADER_BASENAME,
+    },
+    debug: {
+      wasm: QUICKJS_WASM64_DEBUG_BASENAME,
+      loader: QUICKJS_WASM64_DEBUG_LOADER_BASENAME,
+    },
   },
 };
 
@@ -78,17 +114,23 @@ export async function loadQuickjsWasmMetadata(): Promise<QuickjsWasmBuildMetadat
 
 export async function getQuickjsWasmArtifact(
   variant: QuickjsWasmVariant = DEFAULT_VARIANT,
+  buildType: QuickjsWasmBuildType = DEFAULT_BUILD_TYPE,
   metadata?: QuickjsWasmBuildMetadata,
 ): Promise<QuickjsWasmArtifact> {
   const resolvedMetadata = metadata ?? (await loadQuickjsWasmMetadata());
-  const variantMetadata = resolvedMetadata.variants?.[variant];
+  const buildMatrix = resolvedMetadata.variants?.[variant];
+  const variantMetadata = buildMatrix?.[buildType];
   if (!variantMetadata) {
+    const available =
+      buildMatrix && Object.keys(buildMatrix).length > 0
+        ? ` Available build types: ${Object.keys(buildMatrix).join(', ')}.`
+        : '';
     throw new Error(
-      `Wasm variant "${variant}" is not available. Run "pnpm nx build quickjs-wasm-build" to regenerate artifacts.`,
+      `Wasm variant "${variant}" (${buildType}) is not available.${available} Run "pnpm nx build quickjs-wasm-build" to regenerate artifacts.`,
     );
   }
 
-  const filenames = VARIANT_FILENAMES[variant];
+  const filenames = VARIANT_FILENAMES[variant][buildType];
   const wasmUrl = await resolveArtifactUrl(
     variantMetadata.wasm?.filename ?? filenames.wasm,
   );
@@ -98,6 +140,7 @@ export async function getQuickjsWasmArtifact(
 
   return {
     variant,
+    buildType,
     wasmUrl,
     loaderUrl,
     variantMetadata,
@@ -106,17 +149,19 @@ export async function getQuickjsWasmArtifact(
 
 export async function loadQuickjsWasmBinary(
   variant: QuickjsWasmVariant = DEFAULT_VARIANT,
+  buildType: QuickjsWasmBuildType = DEFAULT_BUILD_TYPE,
   metadata?: QuickjsWasmBuildMetadata,
 ): Promise<Uint8Array> {
-  const artifact = await getQuickjsWasmArtifact(variant, metadata);
+  const artifact = await getQuickjsWasmArtifact(variant, buildType, metadata);
   return readUrlBinary(artifact.wasmUrl);
 }
 
 export async function loadQuickjsWasmLoaderSource(
   variant: QuickjsWasmVariant = DEFAULT_VARIANT,
+  buildType: QuickjsWasmBuildType = DEFAULT_BUILD_TYPE,
   metadata?: QuickjsWasmBuildMetadata,
 ): Promise<string> {
-  const artifact = await getQuickjsWasmArtifact(variant, metadata);
+  const artifact = await getQuickjsWasmArtifact(variant, buildType, metadata);
   return readUrlText(artifact.loaderUrl);
 }
 
@@ -124,6 +169,33 @@ export function listAvailableQuickjsWasmVariants(
   metadata: QuickjsWasmBuildMetadata,
 ): QuickjsWasmVariant[] {
   return Object.keys(metadata.variants ?? {}) as QuickjsWasmVariant[];
+}
+
+export function listAvailableQuickjsWasmBuildTypes(
+  metadata: QuickjsWasmBuildMetadata,
+  variant: QuickjsWasmVariant,
+): QuickjsWasmBuildType[] {
+  return Object.keys(
+    metadata.variants?.[variant] ?? {},
+  ) as QuickjsWasmBuildType[];
+}
+
+export function listAvailableQuickjsWasmBuildTargets(
+  metadata: QuickjsWasmBuildMetadata,
+): Array<{ variant: QuickjsWasmVariant; buildType: QuickjsWasmBuildType }> {
+  const entries: Array<{
+    variant: QuickjsWasmVariant;
+    buildType: QuickjsWasmBuildType;
+  }> = [];
+  const variants = metadata.variants ?? {};
+  for (const variant of Object.keys(variants) as QuickjsWasmVariant[]) {
+    for (const buildType of Object.keys(
+      variants[variant] ?? {},
+    ) as QuickjsWasmBuildType[]) {
+      entries.push({ variant, buildType });
+    }
+  }
+  return entries;
 }
 
 async function resolveArtifactUrl(filename: string): Promise<URL> {

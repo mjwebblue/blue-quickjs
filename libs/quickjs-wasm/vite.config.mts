@@ -58,10 +58,13 @@ function copyWasmArtifactsPlugin() {
       };
 
       await copyArtifact(QUICKJS_WASM_METADATA_BASENAME);
-      for (const variant of Object.values(metadata.variants ?? {})) {
-        if (!variant) continue;
-        await copyArtifact(variant.wasm.filename);
-        await copyArtifact(variant.loader.filename);
+      for (const builds of Object.values(metadata.variants ?? {})) {
+        if (!builds) continue;
+        for (const variant of Object.values(builds ?? {})) {
+          if (!variant) continue;
+          await copyArtifact(variant.wasm.filename);
+          await copyArtifact(variant.loader.filename);
+        }
       }
     },
   };

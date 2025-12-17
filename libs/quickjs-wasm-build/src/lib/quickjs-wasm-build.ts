@@ -3,11 +3,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export type QuickjsWasmVariant = 'wasm32' | 'wasm64';
+export type QuickjsWasmBuildType = 'release' | 'debug';
 
 export const QUICKJS_WASM_BASENAME = 'quickjs-eval.wasm';
 export const QUICKJS_WASM_LOADER_BASENAME = 'quickjs-eval.js';
+export const QUICKJS_WASM_DEBUG_BASENAME = 'quickjs-eval-debug.wasm';
+export const QUICKJS_WASM_DEBUG_LOADER_BASENAME = 'quickjs-eval-debug.js';
 export const QUICKJS_WASM64_BASENAME = 'quickjs-eval-wasm64.wasm';
 export const QUICKJS_WASM64_LOADER_BASENAME = 'quickjs-eval-wasm64.js';
+export const QUICKJS_WASM64_DEBUG_BASENAME = 'quickjs-eval-wasm64-debug.wasm';
+export const QUICKJS_WASM64_DEBUG_LOADER_BASENAME =
+  'quickjs-eval-wasm64-debug.js';
 export const QUICKJS_WASM_METADATA_BASENAME =
   'quickjs-wasm-build.metadata.json';
 
@@ -16,22 +22,37 @@ const artifactDir = path.resolve(
   'dist',
 );
 
-const ARTIFACTS: Record<QuickjsWasmVariant, { wasm: string; loader: string }> =
-  {
-    wasm32: {
+const ARTIFACTS: Record<
+  QuickjsWasmVariant,
+  Record<QuickjsWasmBuildType, { wasm: string; loader: string }>
+> = {
+  wasm32: {
+    release: {
       wasm: QUICKJS_WASM_BASENAME,
       loader: QUICKJS_WASM_LOADER_BASENAME,
     },
-    wasm64: {
+    debug: {
+      wasm: QUICKJS_WASM_DEBUG_BASENAME,
+      loader: QUICKJS_WASM_DEBUG_LOADER_BASENAME,
+    },
+  },
+  wasm64: {
+    release: {
       wasm: QUICKJS_WASM64_BASENAME,
       loader: QUICKJS_WASM64_LOADER_BASENAME,
     },
-  };
+    debug: {
+      wasm: QUICKJS_WASM64_DEBUG_BASENAME,
+      loader: QUICKJS_WASM64_DEBUG_LOADER_BASENAME,
+    },
+  },
+};
 
 export function getQuickjsWasmArtifacts(
   variant: QuickjsWasmVariant = 'wasm32',
+  buildType: QuickjsWasmBuildType = 'release',
 ) {
-  const entry = ARTIFACTS[variant];
+  const entry = ARTIFACTS[variant][buildType];
   return {
     wasmPath: path.join(artifactDir, entry.wasm),
     loaderPath: path.join(artifactDir, entry.loader),
@@ -49,6 +70,8 @@ export interface QuickjsWasmBuildVariantMetadata {
   wasm: QuickjsWasmBuildArtifactInfo;
   loader: QuickjsWasmBuildArtifactInfo;
   variantFlags?: string[];
+  buildType: QuickjsWasmBuildType;
+  buildFlags?: string[];
 }
 
 export interface QuickjsWasmMemoryConfig {
@@ -75,7 +98,10 @@ export interface QuickjsWasmBuildMetadata {
   engineBuildHash: string | null;
   build: QuickjsWasmBuildConfig;
   variants: Partial<
-    Record<QuickjsWasmVariant, QuickjsWasmBuildVariantMetadata>
+    Record<
+      QuickjsWasmVariant,
+      Partial<Record<QuickjsWasmBuildType, QuickjsWasmBuildVariantMetadata>>
+    >
   >;
 }
 

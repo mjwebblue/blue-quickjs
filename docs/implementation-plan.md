@@ -830,14 +830,14 @@ Produce a minimal Emscripten-built QuickJS-in-Wasm binary that exposes the canon
 
 **Current state (P2.5 T-029 Subtask A):**
 
-- `pnpm nx build quickjs-wasm-build` now calls an emscripten build script (pinned 3.1.56) that compiles the deterministic QuickJS fork + a wasm harness to `libs/quickjs-wasm-build/dist/quickjs-eval.{js,wasm}` (alongside the TS outputs in the same folder).
+- `pnpm nx build quickjs-wasm-build` now calls an emscripten build script (pinned 3.1.56) that compiles the deterministic QuickJS fork + a wasm harness to `libs/quickjs-wasm-build/dist/quickjs-eval{,-debug}.{js,wasm}` (alongside the TS outputs in the same folder, with optional memory64 variants when enabled).
 - The harness exports `qjs_eval(code, gas_limit)` and `qjs_free_output(ptr)`; `qjs_eval` mirrors the native harness formatting (`RESULT … GAS …` / `ERROR … GAS …`) and runs deterministic GC checkpoints around evaluation.
-- The JS glue is an ES module (`QuickJSGasWasm` factory) with runtime methods exported for `cwrap`/`UTF8ToString`; artifact paths are surfaced via `getQuickjsWasmArtifacts()` in `libs/quickjs-wasm-build`.
+- The JS glue is an ES module (`QuickJSGasWasm` factory) with runtime methods exported for `cwrap`/`UTF8ToString`; artifact paths are surfaced via `getQuickjsWasmArtifacts(variant, buildType)` in `libs/quickjs-wasm-build`.
 
 **Current state (P2.5 T-029 Subtask B):**
 
 - The vitest spec at `libs/test-harness/src/lib/gas-equivalence.spec.ts` now covers the full gas fixture set (`zero-precharge`, `gc-checkpoint-budget`, `loop-oog`, `constant`, `addition`, `string-repeat`) against the wasm harness using the wasm32 artifact by default, asserting expected kind/message/gas remaining/used. Setting `QJS_WASM_VARIANT=wasm64` switches the test to the memory64 artifact and restores native-vs-wasm comparisons for debugging.
-- The wasm build defaults to wasm32 with `-sWASM_BIGINT=1`; `libs/quickjs-wasm-build/scripts/build-wasm.sh` accepts `WASM_VARIANTS=wasm32,wasm64` to also emit `quickjs-eval-wasm64.{js,wasm}`. Artifacts are resolved via `getQuickjsWasmArtifacts(variant)` so callers can pick the desired target.
+- The wasm build defaults to wasm32 with `-sWASM_BIGINT=1`; `libs/quickjs-wasm-build/scripts/build-wasm.sh` accepts `WASM_VARIANTS=wasm32,wasm64` to also emit `quickjs-eval-wasm64{,-debug}.{js,wasm}`, and `WASM_BUILD_TYPES=release,debug` to control whether debug builds are emitted. Harnesses use `getQuickjsWasmArtifacts(variant, buildType)` with `QJS_WASM_BUILD_TYPE` defaulting to `release`.
 - **Compatibility note:** wasm32 gas numbers diverge from native because of the 32-bit allocator layout, but Node and browser harnesses now agree on the wasm32 outputs. wasm32 is the chosen canonical variant; wasm64 is not planned/supported (memory64 remains non-portable in mainstream browsers), so native-parity debugging should proceed within wasm32 expectations.
 
 **Current state (P2.5 T-029 Subtask C):**
@@ -1372,8 +1372,8 @@ Publish Wasm bytes + loader and metadata in a consumable library.
 
 **Current state (P4 T-052):**
 
-- `@blue-quickjs/quickjs-wasm` packages `quickjs-eval{,-wasm64}.{js,wasm}` and `quickjs-wasm-build.metadata.json` under `dist/wasm`, exporting them in `package.json`.
-- Public helpers (`loadQuickjsWasmMetadata`, `getQuickjsWasmArtifact`, `loadQuickjsWasmBinary`, `loadQuickjsWasmLoaderSource`) resolve artifacts in Node (file URLs) and browser/bundler contexts; constants/types come from `@blue-quickjs/quickjs-wasm-build`.
+- `@blue-quickjs/quickjs-wasm` packages `quickjs-eval{,-debug}{,-wasm64}.{js,wasm}` and `quickjs-wasm-build.metadata.json` under `dist/wasm`, exporting them in `package.json`.
+- Public helpers (`loadQuickjsWasmMetadata`, `getQuickjsWasmArtifact`, `loadQuickjsWasmBinary`, `loadQuickjsWasmLoaderSource`) resolve artifacts in Node (file URLs) and browser/bundler contexts; constants/types come from `@blue-quickjs/quickjs-wasm-build`, and helpers accept both `variant` and `buildType`.
 - Vite build copies artifacts from `quickjs-wasm-build/dist` into the package; tests assert metadata presence and successful wasm/loader loading (magic header, host_call marker). `quickjs-wasm-build` remains the build-only/private producer of artifacts.
 
 ---
@@ -1381,7 +1381,7 @@ Publish Wasm bytes + loader and metadata in a consumable library.
 ### T-053: Add release and debug Wasm variants (same semantics)
 
 **Phase:** P4 – Emscripten build and deterministic artifacts
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-051
 
 **Goal:**
@@ -1391,13 +1391,19 @@ Provide two variants without changing semantics (debug adds assertions/tape, not
 
 **Detailed tasks:**
 
-- [ ] Add release build config.
-- [ ] Add debug config (asserts/tracing).
-- [ ] Ensure runtime can select variant and that variant identity is pinnable via `P` metadata.
+- [x] Add release build config.
+- [x] Add debug config (asserts/tracing).
+- [x] Ensure runtime can select variant and that variant identity is pinnable via `P` metadata.
 
 **Acceptance criteria:**
 
-- [ ] Both variants build and run the same sample program successfully.
+- [x] Both variants build and run the same sample program successfully.
+
+**Current state (P4 T-053):**
+
+- `libs/quickjs-wasm-build/scripts/build-wasm.sh` now emits release + debug artifacts for each requested variant (default wasm32) and accepts `WASM_BUILD_TYPES=release,debug` alongside `WASM_VARIANTS`. Debug builds add Emscripten assertions and stack-overflow checks; metadata records `buildType`, `buildFlags`, and per-build hashes.
+- `@blue-quickjs/quickjs-wasm-build` exports debug basenames, and `getQuickjsWasmArtifacts(variant, buildType)` resolves the correct paths.
+- `@blue-quickjs/quickjs-wasm` packages all release/debug artifacts, exposes `QuickjsWasmBuildType`, lists available build targets, and tests instantiate each build target to evaluate a sample program, asserting matching results/gas across release/debug for the same variant. Harnesses accept `QJS_WASM_BUILD_TYPE` alongside `QJS_WASM_VARIANT`.
 
 ---
 

@@ -13,10 +13,14 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./quickjs-eval-debug.wasm": "./dist/wasm/quickjs-eval-debug.wasm",
+    "./quickjs-eval-debug": "./dist/wasm/quickjs-eval-debug.js",
     "./quickjs-eval.wasm": "./dist/wasm/quickjs-eval.wasm",
     "./quickjs-eval": "./dist/wasm/quickjs-eval.js",
     "./quickjs-eval-wasm64.wasm": "./dist/wasm/quickjs-eval-wasm64.wasm",
     "./quickjs-eval-wasm64": "./dist/wasm/quickjs-eval-wasm64.js",
+    "./quickjs-eval-wasm64-debug.wasm": "./dist/wasm/quickjs-eval-wasm64-debug.wasm",
+    "./quickjs-eval-wasm64-debug": "./dist/wasm/quickjs-eval-wasm64-debug.js",
     "./quickjs-wasm-build.metadata.json": "./dist/wasm/quickjs-wasm-build.metadata.json"
   },
   "files": [
