@@ -65,6 +65,16 @@ Params are wasm `i32` values (module/name as shown above) and MUST be interprete
   - suspend/yield to an event loop that could observe or mutate VM state mid-call.
 - The host may read/write the provided memory region and run pure synchronous logic only. Any async or delayed work must be handled outside the VM invocation.
 
+## Optional VM-side host-call tape (T-043)
+
+The VM can emit a deterministic, bounded tape of host-call observations for audit/debug:
+
+- Records (ring buffer, max capacity 1024) capture: `fn_id` (uint32), request/response byte lengths (uint32), `units` (uint32), pre/post gas charges (uint64), `is_error` flag (response envelope shape), `charge_failed` flag (post-charge overflow/OOG), and SHA-256 hashes of the raw request/response bytes.
+- The ring is per-context; overflow overwrites the oldest entry. Tape order follows call order.
+- Opt-in via C API: `JS_EnableHostTape(ctx, capacity)` (0 disables), `JS_ResetHostTape(ctx)`, `JS_GetHostTapeLength(ctx)`, `JS_ReadHostTape(ctx, records, max, &count)`. Reading does not mutate the ring.
+- Tape hashing uses SHA-256 over the DV-encoded request slice sent to the host and the DV-encoded response envelope received.
+- Tape recording is side-effect-free and does not alter host-call semantics or gas; when disabled, no extra work is performed.
+
 ### Reference implementation sketch (TS host)
 
 ```ts

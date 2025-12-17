@@ -1263,7 +1263,7 @@ Ensure host calls incur deterministic gas independent of host performance.
 ### T-043: Add optional VM-side tape for auditing host calls
 
 **Phase:** P3 – Host ABI (DV + manifest + syscall)
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-042
 
 **Goal:**
@@ -1273,13 +1273,19 @@ Provide deterministic audit traces (request/response hashes, fn_id, gas breakdow
 
 **Detailed tasks:**
 
-- [ ] Define tape record fields and hashing algorithm(s) (document).
-- [ ] Implement bounded tape buffer in VM.
-- [ ] Expose tape output deterministically as part of evaluation result.
+- [x] Define tape record fields and hashing algorithm(s) (document).
+- [x] Implement bounded tape buffer in VM.
+- [x] Expose tape output deterministically as part of evaluation result.
 
 **Acceptance criteria:**
 
-- [ ] Tape enabled runs produce identical tape across repeated executions.
+- [x] Tape enabled runs produce identical tape across repeated executions.
+
+**Current state (P3 T-043):**
+
+- `quickjs-host.*` now keeps an optional per-context ring buffer (max 1024 records) recording `fn_id`, request/response byte lengths, units, pre/post gas charges, `is_error`/`charge_failed` flags, and SHA-256 hashes of the request/response bytes. It is opt-in via `JS_EnableHostTape(ctx, capacity)`, resettable, and readable in order via `JS_ReadHostTape`/`JS_GetHostTapeLength`.
+- Tape hashing uses SHA-256 over the exact DV request/response slices; ring order is deterministic and bounded, with overflow wrapping oldest entries.
+- SDK/evaluator can include tape in results by calling the tape read API after execution without affecting VM semantics.
 
 ---
 
