@@ -1,212 +1,309 @@
 import './app.element.css';
 
-import { HOST_V1_MANIFEST } from '@blue-quickjs/test-harness';
-import { createRuntime } from '@blue-quickjs/quickjs-runtime';
-import { gasFixtures, type GasFixture } from './gas-fixtures';
+import { encodeDv } from '@blue-quickjs/dv';
+import {
+  SMOKE_BASELINE,
+  SMOKE_GAS_LIMIT,
+  SMOKE_INPUT,
+  SMOKE_MANIFEST,
+  SMOKE_PROGRAM,
+  createSmokeHost,
+  serializeHostTape,
+} from '@blue-quickjs/test-harness';
+import {
+  type EvaluateResult,
+  evaluate,
+  type HostTapeRecord,
+} from '@blue-quickjs/quickjs-runtime';
+import {
+  loadQuickjsWasmBinary,
+  loadQuickjsWasmMetadata,
+  type QuickjsWasmBuildMetadata,
+} from '@blue-quickjs/quickjs-wasm';
 
-type HarnessResultKind = 'RESULT' | 'ERROR';
+type RunState = 'idle' | 'running' | 'done' | 'error';
 
-interface HarnessResult {
-  kind: HarnessResultKind;
-  message: string;
-  gasRemaining: number;
-  gasUsed: number;
-  state?: string | null;
-  trace?: string | null;
+interface SmokeDisplay {
+  status: 'ok' | 'error';
+  manifestHash: string;
+  wasmHash: string | null;
+  wasmExpected: string | null;
+  engineBuildHash: string | null;
+  resultHash: string | null;
+  gasUsed: bigint;
+  gasRemaining: bigint;
+  tapeHash: string | null;
+  tapeLength: number;
+  emittedCount: number;
+  errorCode: string;
+  errorTag: string;
   raw: string;
 }
 
-function parseHarnessOutput(raw: string): HarnessResult {
-  const trimmed = raw.trim();
-  const match =
-    /^(RESULT|ERROR)\s+(.*?)\s+GAS\s+remaining=(\d+)\s+used=(\d+)(?:\s+STATE\s+([\w.-]+))?(?:\s+TRACE\s+(.*))?$/u.exec(
-      trimmed,
-    );
-  if (!match) {
-    throw new Error(`Unable to parse harness output: ${trimmed}`);
-  }
-  const [, kind, message, remaining, used, state, trace] = match;
-  return {
-    kind: kind as HarnessResultKind,
-    message,
-    gasRemaining: Number(remaining),
-    gasUsed: Number(used),
-    state: state ?? null,
-    trace: trace?.trim() ?? null,
-    raw: trimmed,
-  };
+interface WasmArtifacts {
+  metadata: QuickjsWasmBuildMetadata;
+  wasmBinary: Uint8Array;
+  wasmHash: string;
+  expectedWasmHash: string | null;
+  engineBuildHash: string | null;
 }
 
-function resultsMatch(actual: HarnessResult, expected: HarnessResult): boolean {
-  const stateMatches =
-    expected.state !== undefined && expected.state !== null
-      ? (actual.state ?? null) === expected.state
-      : true;
-  const traceMatches = expected.trace ? actual.trace === expected.trace : true;
-  return (
-    actual.kind === expected.kind &&
-    actual.message === expected.message &&
-    actual.gasRemaining === expected.gasRemaining &&
-    actual.gasUsed === expected.gasUsed &&
-    stateMatches &&
-    traceMatches
-  );
-}
-
-async function createWasmRunner() {
-  const runtime = await createRuntime({
-    manifest: HOST_V1_MANIFEST,
-    handlers: {
-      document: {
-        get: (path: string) => ({ ok: { path }, units: 1 }),
-        getCanonical: (path: string) => ({ ok: { canonical: path }, units: 1 }),
-      },
-      emit: () => ({ ok: null, units: 0 }),
-    },
-  });
-  const module = runtime.module;
-  const evalFn = module.cwrap('qjs_eval', 'number', ['string', 'bigint']);
-  const freeFn = module.cwrap('qjs_free_output', null, ['number']);
-  return (code: string, gasLimit: bigint) => {
-    const ptr = evalFn(code, gasLimit);
-    const ptrNumber = normalizePtr(ptr);
-    const output = module.UTF8ToString(ptrNumber);
-    freeFn(ptrNumber);
-    return output.trim();
-  };
-}
+const EXPECTED = {
+  resultHash: SMOKE_BASELINE.resultHash,
+  gasUsed: SMOKE_BASELINE.gasUsed.toString(),
+  gasRemaining: SMOKE_BASELINE.gasRemaining.toString(),
+  tapeHash: SMOKE_BASELINE.tapeHash,
+  tapeLength: SMOKE_BASELINE.tapeLength.toString(),
+  emittedCount: SMOKE_BASELINE.emittedCount.toString(),
+  errorCode: 'none',
+  errorTag: 'none',
+} as const;
 
 export class AppElement extends HTMLElement {
-  private runnerPromise: Promise<
-    (code: string, gasLimit: bigint) => string
-  > | null = null;
-
   private isRunning = false;
+
+  private artifactsPromise: Promise<WasmArtifacts> | null = null;
 
   connectedCallback() {
     this.render();
     this.attachEvents();
-    void this.runAll();
+    this.setBaselineExpectations();
+    void this.runSmoke();
   }
 
   private attachEvents() {
     this.querySelector<HTMLButtonElement>('[data-run]')?.addEventListener(
       'click',
-      () => this.runAll(),
+      () => this.runSmoke(),
     );
   }
 
-  private async runAll() {
+  private async runSmoke() {
     if (this.isRunning) {
       return;
     }
     this.isRunning = true;
-    this.updateRunstate('running', 'Running gas fixtures…');
+    this.updateRunstate('running', 'Running browser smoke fixture…');
 
-    let runWasm: (code: string, gasLimit: bigint) => string;
     try {
-      runWasm = await this.getRunner();
+      const artifacts = await this.loadArtifacts();
+      this.setExpected('wasm-hash', artifacts.expectedWasmHash ?? 'n/a');
+      if (artifacts.engineBuildHash) {
+        this.updateText(
+          '[data-field="engine-hash"] [data-actual]',
+          artifacts.engineBuildHash,
+        );
+      }
+
+      const display = await this.executeSmoke(artifacts);
+      this.applyDisplay(display);
+      this.updateRunstate('done', 'Done');
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'Failed to load wasm harness';
-      this.setAllToError(message);
+        error instanceof Error ? error.message : 'Failed to run smoke fixture';
+      this.showError(message);
       this.updateRunstate('error', message);
+    } finally {
       this.isRunning = false;
-      return;
-    }
-
-    for (const fixture of gasFixtures) {
-      await this.runFixture(runWasm, fixture);
-    }
-
-    this.updateRunstate('done', 'Done');
-    this.isRunning = false;
-  }
-
-  private async runFixture(
-    runWasm: (code: string, gasLimit: bigint) => string,
-    fixture: GasFixture,
-  ) {
-    const caseEl = this.querySelector<HTMLElement>(
-      `[data-test-case="${fixture.name}"]`,
-    );
-    const actualPre = caseEl?.querySelector<HTMLPreElement>('[data-actual]');
-    const pill = caseEl?.querySelector<HTMLElement>('[data-pill]');
-
-    caseEl?.setAttribute('data-status', 'running');
-    if (pill) {
-      pill.textContent = 'running';
-    }
-    if (actualPre) {
-      actualPre.textContent = 'Running…';
-    }
-
-    try {
-      const raw = runWasm(fixture.source, fixture.gasLimit);
-      const actual = parseHarnessOutput(raw);
-      const expected = parseHarnessOutput(fixture.expected);
-      const match = resultsMatch(actual, expected);
-
-      if (actualPre) {
-        actualPre.textContent = actual.raw;
-      }
-
-      if (!match) {
-        console.error('Gas mismatch', {
-          fixture: fixture.name,
-          expected,
-          actual,
-        });
-      }
-
-      caseEl?.setAttribute('data-status', match ? 'ok' : 'fail');
-      if (pill) {
-        pill.textContent = match ? 'ok' : 'fail';
-      }
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : 'Unexpected error running fixture';
-      if (actualPre) {
-        actualPre.textContent = message;
-      }
-      caseEl?.setAttribute('data-status', 'fail');
-      if (pill) {
-        pill.textContent = 'fail';
-      }
-      console.error('Error while running fixture', {
-        fixture: fixture.name,
-        error,
-      });
     }
   }
 
-  private async getRunner() {
-    if (!this.runnerPromise) {
-      this.runnerPromise = createWasmRunner();
+  private async loadArtifacts(): Promise<WasmArtifacts> {
+    if (!this.artifactsPromise) {
+      this.artifactsPromise = (async () => {
+        const metadata = await loadQuickjsWasmMetadata();
+        const wasmBinary = await loadQuickjsWasmBinary();
+        const wasmHash = await sha256Hex(wasmBinary);
+        const expectedWasmHash =
+          metadata.variants?.wasm32?.release?.wasm.sha256 ?? null;
+        const engineBuildHash =
+          metadata.variants?.wasm32?.release?.engineBuildHash ??
+          metadata.engineBuildHash ??
+          null;
+
+        return {
+          metadata,
+          wasmBinary,
+          wasmHash,
+          expectedWasmHash,
+          engineBuildHash,
+        };
+      })();
     }
-    return this.runnerPromise;
+    return this.artifactsPromise;
   }
 
-  private setAllToError(message: string) {
-    this.querySelectorAll<HTMLElement>('[data-test-case]').forEach((caseEl) => {
-      caseEl.setAttribute('data-status', 'fail');
-      const pill = caseEl.querySelector<HTMLElement>('[data-pill]');
-      if (pill) {
-        pill.textContent = 'fail';
-      }
-      const actualPre = caseEl.querySelector<HTMLPreElement>('[data-actual]');
-      if (actualPre) {
-        actualPre.textContent = message;
-      }
+  private async executeSmoke(artifacts: WasmArtifacts): Promise<SmokeDisplay> {
+    const host = createSmokeHost(SMOKE_INPUT);
+    const result = await evaluate({
+      program: SMOKE_PROGRAM,
+      input: SMOKE_INPUT,
+      gasLimit: SMOKE_GAS_LIMIT,
+      manifest: SMOKE_MANIFEST,
+      handlers: host.handlers,
+      metadata: artifacts.metadata,
+      wasmBinary: artifacts.wasmBinary,
+      tape: { capacity: 16 },
     });
+
+    return this.toDisplay(result, host.emitted.length, artifacts);
   }
 
-  private updateRunstate(
-    state: 'idle' | 'running' | 'done' | 'error',
-    label: string,
+  private async toDisplay(
+    result: EvaluateResult,
+    emittedCount: number,
+    artifacts: WasmArtifacts,
+  ): Promise<SmokeDisplay> {
+    const tapeHash = await hashTape(result.tape ?? []);
+    const resultHash = result.ok ? await hashDv(result.value) : null;
+    const errorCode = result.ok ? EXPECTED.errorCode : result.error.code;
+    const errorTag = result.ok
+      ? EXPECTED.errorTag
+      : 'tag' in result.error
+        ? (result.error.tag ?? 'unknown')
+        : 'unknown';
+
+    return {
+      status: result.ok ? 'ok' : 'error',
+      manifestHash: SMOKE_PROGRAM.abiManifestHash,
+      wasmHash: artifacts.wasmHash,
+      wasmExpected: artifacts.expectedWasmHash,
+      engineBuildHash: artifacts.engineBuildHash,
+      resultHash,
+      gasUsed: result.gasUsed,
+      gasRemaining: result.gasRemaining,
+      tapeHash,
+      tapeLength: result.tape?.length ?? 0,
+      emittedCount,
+      errorCode,
+      errorTag,
+      raw: result.raw.trim(),
+    };
+  }
+
+  private applyDisplay(display: SmokeDisplay) {
+    const match = {
+      wasmHash:
+        display.wasmExpected !== null
+          ? display.wasmHash === display.wasmExpected
+          : true,
+      resultHash:
+        display.resultHash !== null &&
+        display.resultHash === EXPECTED.resultHash,
+      gasUsed: display.gasUsed === BigInt(EXPECTED.gasUsed),
+      gasRemaining: display.gasRemaining === BigInt(EXPECTED.gasRemaining),
+      tapeHash:
+        display.tapeHash !== null && display.tapeHash === EXPECTED.tapeHash,
+      tapeLength: display.tapeLength.toString() === EXPECTED.tapeLength,
+      emitted: display.emittedCount.toString() === EXPECTED.emittedCount,
+      errorCode: display.errorCode === EXPECTED.errorCode,
+      errorTag: display.errorTag === EXPECTED.errorTag,
+    };
+
+    this.updateStatus(display.status);
+    this.updateMetric('wasm-hash', display.wasmHash ?? 'unavailable', {
+      expected: display.wasmExpected ?? undefined,
+      match: match.wasmHash,
+    });
+    this.updateMetric('result-hash', display.resultHash ?? 'n/a', {
+      expected: EXPECTED.resultHash,
+      match: match.resultHash,
+    });
+    this.updateMetric('gas-used', display.gasUsed.toString(), {
+      expected: EXPECTED.gasUsed,
+      match: match.gasUsed,
+    });
+    this.updateMetric('gas-remaining', display.gasRemaining.toString(), {
+      expected: EXPECTED.gasRemaining,
+      match: match.gasRemaining,
+    });
+    this.updateMetric('tape-hash', display.tapeHash ?? 'n/a', {
+      expected: EXPECTED.tapeHash,
+      match: match.tapeHash,
+    });
+    this.updateMetric('tape-length', display.tapeLength.toString(), {
+      expected: EXPECTED.tapeLength,
+      match: match.tapeLength,
+    });
+    this.updateMetric('emits', display.emittedCount.toString(), {
+      expected: EXPECTED.emittedCount,
+      match: match.emitted,
+    });
+    this.updateMetric('error-code', display.errorCode, {
+      expected: EXPECTED.errorCode,
+      match: match.errorCode,
+    });
+    this.updateMetric('error-tag', display.errorTag, {
+      expected: EXPECTED.errorTag,
+      match: match.errorTag,
+    });
+
+    this.updateText(
+      '[data-field="manifest-hash"] [data-actual]',
+      display.manifestHash,
+    );
+    if (display.engineBuildHash) {
+      this.updateText(
+        '[data-field="engine-hash"] [data-actual]',
+        display.engineBuildHash,
+      );
+    }
+
+    const raw = this.querySelector<HTMLElement>('[data-raw]');
+    if (raw) {
+      raw.textContent = display.raw || '—';
+    }
+  }
+
+  private setBaselineExpectations() {
+    this.setExpected('result-hash', EXPECTED.resultHash);
+    this.setExpected('gas-used', EXPECTED.gasUsed);
+    this.setExpected('gas-remaining', EXPECTED.gasRemaining);
+    this.setExpected('tape-hash', EXPECTED.tapeHash);
+    this.setExpected('tape-length', EXPECTED.tapeLength);
+    this.setExpected('emits', EXPECTED.emittedCount);
+    this.setExpected('error-code', EXPECTED.errorCode);
+    this.setExpected('error-tag', EXPECTED.errorTag);
+  }
+
+  private updateMetric(
+    field: string,
+    actual: string,
+    options?: { expected?: string; match?: boolean },
   ) {
+    const card = this.querySelector<HTMLElement>(`[data-field="${field}"]`);
+    const actualEl = card?.querySelector<HTMLElement>('[data-actual]');
+    if (actualEl) {
+      actualEl.textContent = actual;
+    }
+    if (options?.expected !== undefined) {
+      this.setExpected(field, options.expected);
+      if (options.match !== undefined && card) {
+        card.setAttribute('data-match', options.match ? 'true' : 'false');
+      }
+    }
+  }
+
+  private setExpected(field: string, expected: string) {
+    const card = this.querySelector<HTMLElement>(`[data-field="${field}"]`);
+    const expectedEl = card?.querySelector<HTMLElement>('[data-expected]');
+    if (expectedEl) {
+      expectedEl.textContent = expected;
+    }
+  }
+
+  private updateStatus(status: 'ok' | 'error') {
+    const card = this.querySelector<HTMLElement>('[data-field="status"]');
+    if (card) {
+      card.setAttribute('data-status', status);
+      const actualEl = card.querySelector<HTMLElement>('[data-actual]');
+      if (actualEl) {
+        actualEl.textContent = status;
+      }
+    }
+  }
+
+  private updateRunstate(state: RunState, label: string) {
     const runstate = this.querySelector<HTMLElement>('[data-runstate]');
     if (runstate) {
       runstate.textContent = label;
@@ -214,65 +311,149 @@ export class AppElement extends HTMLElement {
     }
   }
 
+  private showError(message: string) {
+    this.updateStatus('error');
+    const cards = this.querySelectorAll<HTMLElement>('[data-field]');
+    cards.forEach((card) => {
+      if (!card.dataset.match) {
+        card.setAttribute('data-match', 'false');
+      }
+    });
+    const raw = this.querySelector<HTMLElement>('[data-raw]');
+    if (raw) {
+      raw.textContent = message;
+    }
+  }
+
+  private updateText(selector: string, value: string) {
+    const el = this.querySelector<HTMLElement>(selector);
+    if (el) {
+      el.textContent = value;
+    }
+  }
+
   private render() {
     this.innerHTML = `
       <main class="page">
         <header class="hero">
-          <p class="eyebrow">T-029C · Browser gas smoke</p>
-          <h1>QuickJS wasm gas fixtures (browser)</h1>
+          <p class="eyebrow">T-071 · Browser smoke</p>
+          <h1>Deterministic QuickJS (browser)</h1>
           <p class="lede">
-            Loads the deterministic QuickJS wasm harness in-browser and checks the gas
-            outputs against the wasm32 baselines shared with the Node harness. Mismatches
-            are logged to the console for debugging.
+            Runs the Host.v1 smoke fixture in-browser using the same wasm bytes as the Node runner,
+            then compares the hashes against the Node baseline.
           </p>
           <div class="controls">
             <button type="button" data-run>Run again</button>
             <span class="runstate" data-runstate="idle">Idle</span>
           </div>
         </header>
-        <section class="cases" aria-live="polite">
-          ${gasFixtures
-            .map(
-              (fixture) => `
-                <article class="case" data-test-case="${fixture.name}" data-status="pending">
-                  <div class="case-header">
-                    <div>
-                      <p class="label">${fixture.name}</p>
-                      <p class="meta">gas limit ${fixture.gasLimit.toString()}</p>
-                    </div>
-                    <span class="pill" data-pill>pending</span>
-                  </div>
-                  <div class="panels">
-                    <div>
-                      <p class="panel-title">expected</p>
-                      <pre data-expected>${fixture.expected}</pre>
-                    </div>
-                    <div>
-                      <p class="panel-title">actual</p>
-                      <pre data-actual>waiting…</pre>
-                    </div>
-                  </div>
-                </article>
-              `,
-            )
-            .join('')}
+        <section class="metrics">
+          <article class="card" data-field="status">
+            <p class="label">status</p>
+            <p class="value" data-actual>not run</p>
+          </article>
+          <article class="card" data-field="wasm-hash">
+            <p class="label">wasm sha256</p>
+            <p class="value" data-actual>loading…</p>
+            <p class="meta">expected <span data-expected>loading…</span></p>
+          </article>
+          <article class="card" data-field="engine-hash">
+            <p class="label">engine build</p>
+            <p class="value" data-actual>loading…</p>
+          </article>
+          <article class="card" data-field="manifest-hash">
+            <p class="label">manifest hash</p>
+            <p class="value" data-actual>${SMOKE_PROGRAM.abiManifestHash}</p>
+          </article>
+          <article class="card" data-field="result-hash">
+            <p class="label">result hash</p>
+            <p class="value" data-actual>waiting…</p>
+            <p class="meta">expected <span data-expected>—</span></p>
+          </article>
+          <article class="card" data-field="gas-used">
+            <p class="label">gas used</p>
+            <p class="value" data-actual>—</p>
+            <p class="meta">expected <span data-expected>—</span></p>
+          </article>
+          <article class="card" data-field="gas-remaining">
+            <p class="label">gas remaining</p>
+            <p class="value" data-actual>—</p>
+            <p class="meta">expected <span data-expected>—</span></p>
+          </article>
+          <article class="card" data-field="tape-hash">
+            <p class="label">tape hash</p>
+            <p class="value" data-actual>—</p>
+            <p class="meta">expected <span data-expected>—</span></p>
+          </article>
+          <article class="card" data-field="tape-length">
+            <p class="label">tape length</p>
+            <p class="value" data-actual>—</p>
+            <p class="meta">expected <span data-expected>—</span></p>
+          </article>
+          <article class="card" data-field="emits">
+            <p class="label">host emits</p>
+            <p class="value" data-actual>—</p>
+            <p class="meta">expected <span data-expected>—</span></p>
+          </article>
+          <article class="card" data-field="error-code">
+            <p class="label">error code</p>
+            <p class="value" data-actual>—</p>
+            <p class="meta">expected <span data-expected>—</span></p>
+          </article>
+          <article class="card" data-field="error-tag">
+            <p class="label">error tag</p>
+            <p class="value" data-actual>—</p>
+            <p class="meta">expected <span data-expected>—</span></p>
+          </article>
+        </section>
+        <section class="raw">
+          <p class="panel-title">raw output</p>
+          <pre data-raw>waiting…</pre>
         </section>
       </main>
     `;
   }
 }
 
-function normalizePtr(value: unknown): number {
-  if (typeof value === 'number') {
-    return value;
+async function hashDv(value: unknown): Promise<string> {
+  const encoded = encodeDv(value);
+  return sha256Hex(encoded);
+}
+
+async function hashTape(tape: HostTapeRecord[]): Promise<string | null> {
+  if (tape.length === 0) {
+    return null;
   }
-  if (typeof value === 'bigint') {
-    if (value > BigInt(Number.MAX_SAFE_INTEGER)) {
-      throw new Error('Pointer exceeds JS safe integer range');
-    }
-    return Number(value);
+  return sha256Hex(serializeHostTape(tape));
+}
+
+async function sha256Hex(input: Uint8Array | string): Promise<string> {
+  const bytes =
+    typeof input === 'string' ? new TextEncoder().encode(input) : input;
+  if (!globalThis.crypto?.subtle) {
+    throw new Error('crypto.subtle is not available for hashing');
   }
-  throw new Error(`Unexpected pointer type: ${typeof value}`);
+  const hashInput =
+    bytes.buffer instanceof ArrayBuffer
+      ? bytes.buffer.slice(
+          bytes.byteOffset,
+          bytes.byteOffset + bytes.byteLength,
+        )
+      : (() => {
+          const copy = new Uint8Array(bytes.byteLength);
+          copy.set(bytes);
+          return copy.buffer;
+        })();
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', hashInput);
+  return bufferToHex(new Uint8Array(digest));
+}
+
+function bufferToHex(bytes: Uint8Array): string {
+  let hex = '';
+  for (const byte of bytes) {
+    hex += byte.toString(16).padStart(2, '0');
+  }
+  return hex;
 }
 
 customElements.define('blue-quickjs-root', AppElement);

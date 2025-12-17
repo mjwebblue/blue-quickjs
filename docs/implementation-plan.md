@@ -1690,21 +1690,27 @@ Provide a CLI-like dev runner for quick debugging and fixtures.
 ### T-071: Browser smoke runner (`apps/smoke-web`)
 
 **Phase:** P6 – Smoke apps
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-064, T-053
 
 **Goal:**
 Run the same fixtures in browser and show stable results and wasm hash.
 
+**Current state:**
+
+- `apps/smoke-web` loads the wasm via `@blue-quickjs/quickjs-wasm`, instantiates with the Host.v1 manifest/handlers from `@blue-quickjs/test-harness`, runs the same `(P, I, G)` fixture as smoke-node through `evaluate`, and renders wasm hash/result hash/gas/tape hash/emit count plus manifest + engine hashes.
+- Playwright smoke (`apps/smoke-web/tests/smoke.spec.ts`) starts Vite, waits for completion, and asserts all metrics match the Node baseline; the legacy gas fixtures UI/tests have been removed.
+
 **Detailed tasks:**
 
-- [ ] Load wasm from `quickjs-wasm`.
-- [ ] Run the same fixture set as Node.
-- [ ] Display: wasm hash, result hash, gas used, error code/tag, tape hash.
+- [x] Load wasm from `quickjs-wasm` and instantiate via `evaluate` with the Host.v1 manifest/handlers.
+- [x] Run the shared smoke fixture from `@blue-quickjs/test-harness` (same `(P, I, G)` as smoke-node).
+- [x] Display wasm hash, result hash, gas used/remaining, error code/tag, tape hash, host emit count, and manifest/engine hashes.
+- [x] Add a Playwright check that waits for completion and asserts all metrics match the Node baseline.
 
 **Acceptance criteria:**
 
-- [ ] Browser output matches Node output for the same fixtures.
+- [x] Browser output matches the Node baseline for the Host.v1 smoke fixture and exposes the wasm hash in the UI/Playwright smoke.
 
 ---
 

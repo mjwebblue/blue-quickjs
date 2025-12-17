@@ -1,4 +1,4 @@
-import { SMOKE_PROGRAM } from './fixtures.js';
+import { SMOKE_BASELINE, SMOKE_PROGRAM } from './fixtures.js';
 import { runSmokeNode } from './smoke-node.js';
 
 describe('smokeNode', () => {
@@ -8,10 +8,14 @@ describe('smokeNode', () => {
 
     expect(summary.status).toBe('ok');
     expect(summary.manifestHash).toBe(SMOKE_PROGRAM.abiManifestHash);
+    expect(summary.manifestHash).toBe(SMOKE_BASELINE.manifestHash);
     expect(summary.resultHash).toMatch(/^[0-9a-f]{64}$/);
-    expect(summary.gasUsed > 0n).toBe(true);
-    expect(summary.tapeCount).toBeGreaterThan(0);
-    expect(summary.emitted.length).toBe(1);
+    expect(summary.resultHash).toBe(SMOKE_BASELINE.resultHash);
+    expect(summary.gasUsed).toBe(SMOKE_BASELINE.gasUsed);
+    expect(summary.gasRemaining).toBe(SMOKE_BASELINE.gasRemaining);
+    expect(summary.tapeCount).toBe(SMOKE_BASELINE.tapeLength);
+    expect(summary.tapeHash).toBe(SMOKE_BASELINE.tapeHash);
+    expect(summary.emitted.length).toBe(SMOKE_BASELINE.emittedCount);
     expect(summary.value).toMatchObject({ marker: 'smoke-node' });
     expect(log.some((line) => line.includes('result hash'))).toBe(true);
   });

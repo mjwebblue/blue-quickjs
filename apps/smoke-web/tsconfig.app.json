@@ -34,10 +34,13 @@
       "path": "../../libs/test-harness/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/quickjs-wasm-build/tsconfig.lib.json"
+      "path": "../../libs/quickjs-runtime/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/quickjs-runtime/tsconfig.lib.json"
+      "path": "../../libs/quickjs-wasm/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/dv/tsconfig.lib.json"
     }
   ]
 }

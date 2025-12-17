@@ -10,6 +10,7 @@ import {
   SMOKE_PROGRAM,
   createSmokeHost,
   type SmokeHostEnvironment,
+  serializeHostTape,
 } from './fixtures.js';
 
 export interface SmokeSummary {
@@ -19,6 +20,7 @@ export interface SmokeSummary {
   gasUsed: bigint;
   gasRemaining: bigint;
   tapeCount: number;
+  tapeHash?: string;
   raw: string;
   value?: DV;
   emitted: DV[];
@@ -72,6 +74,11 @@ export async function runSmokeNode(
 }
 
 function summarize(result: EvaluateResult, emitted: DV[]): SmokeSummary {
+  const tapeHash =
+    result.tape && result.tape.length > 0
+      ? hashString(serializeHostTape(result.tape))
+      : undefined;
+
   if (result.ok) {
     return {
       status: 'ok',
@@ -80,6 +87,7 @@ function summarize(result: EvaluateResult, emitted: DV[]): SmokeSummary {
       gasUsed: result.gasUsed,
       gasRemaining: result.gasRemaining,
       tapeCount: result.tape?.length ?? 0,
+      tapeHash,
       raw: result.raw,
       value: result.value,
       emitted,
@@ -92,6 +100,7 @@ function summarize(result: EvaluateResult, emitted: DV[]): SmokeSummary {
     gasUsed: result.gasUsed,
     gasRemaining: result.gasRemaining,
     tapeCount: result.tape?.length ?? 0,
+    tapeHash,
     raw: result.raw,
     error: {
       kind: result.error.kind,
@@ -106,6 +115,10 @@ function summarize(result: EvaluateResult, emitted: DV[]): SmokeSummary {
 function hashDv(value: DV): string {
   const bytes = encodeDv(value);
   return createHash('sha256').update(bytes).digest('hex');
+}
+
+function hashString(value: string): string {
+  return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
 function logSummary(
@@ -132,6 +145,9 @@ function logSummary(
   log(`gas remaining : ${summary.gasRemaining.toString()}`);
   log(`host tape     : ${summary.tapeCount}`);
   log(`host emits    : ${summary.emitted.length}`);
+  if (summary.tapeHash) {
+    log(`tape hash     : ${summary.tapeHash}`);
+  }
 
   if (debug && summary.value !== undefined) {
     log('dv (debug)    :');
