@@ -1748,7 +1748,7 @@ Prove Baseline determinism: same `(P, I, G)` yields identical outputs and OOG po
 ### T-081: Host-call determinism + gas-by-size/units tests
 
 **Phase:** P7 – Determinism & CI
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-042, T-061, T-080
 
 **Goal:**
@@ -1756,16 +1756,22 @@ Verify host-call charging and deterministic behavior for document reads.
 
 **Baseline references:** Baseline #2 §3.2–§3.4
 
+**Current state (P7 T-081):**
+
+- Added host-call-heavy determinism fixtures (varying path lengths + error cases) in `libs/test-harness`.
+- Node + browser determinism suites now cover these fixtures and compare DV hash, gas used/remaining, and tape hash (which includes per-call gas pre/post charges).
+- Host-call OOG boundary behavior remains covered by the native harness tests introduced in T-042 to avoid duplication.
+
 **Detailed tasks:**
 
-- [ ] Add fixtures that call `document()` repeatedly with varying paths.
-- [ ] Use mock host that returns deterministic DV and units.
-- [ ] Assert gas formula correctness (pre/post charge) and OOG boundaries on host calls.
-- [ ] Assert deterministic Err responses for invalid path/not found/limit exceeded.
+- [x] Add fixtures that call `document()` repeatedly with varying paths.
+- [x] Use mock host that returns deterministic DV and units.
+- [x] Assert gas formula correctness (pre/post charge) and OOG boundaries on host calls.
+- [x] Assert deterministic Err responses for invalid path/not found/limit exceeded.
 
 **Acceptance criteria:**
 
-- [ ] Gas and errors match exactly across Node/browser for host-call-heavy scripts.
+- [x] Gas and errors match exactly across Node/browser for host-call-heavy scripts.
 
 ---
 

@@ -263,6 +263,40 @@ export const DETERMINISM_FIXTURES: DeterminismFixture[] = [
     },
   },
   {
+    name: 'host-gas-paths',
+    program: {
+      ...BASE_PROGRAM,
+      code: `
+        (() => {
+          const shortDoc = document("doc");
+          const mediumDoc = document("path/to/medium");
+          const longDoc = document.canonical("path/to/a/very/long/document/path");
+          return {
+            marker: "det-host-gas",
+            shortDoc,
+            mediumDoc,
+            longDoc
+          };
+        })()
+      `.trim(),
+    },
+    input: DETERMINISM_INPUT,
+    gasLimit: DETERMINISM_GAS_LIMIT,
+    manifest: HOST_V1_MANIFEST,
+    createHost: createDeterminismHost,
+    expected: {
+      resultHash:
+        '1b32c406ba95ebbb5a7d8feb85f1bc8af54cb89b51abc51ed7a32aaac77b7e48',
+      errorCode: null,
+      errorTag: null,
+      gasUsed: 2055n,
+      gasRemaining: 47945n,
+      tapeHash:
+        'ac5206968957830c83b2e66c06a97e779c4fdebe595a63fc386ffcb0122368aa',
+      tapeLength: 3,
+    },
+  },
+  {
     name: 'canon-ops',
     program: {
       ...BASE_PROGRAM,
@@ -295,6 +329,58 @@ export const DETERMINISM_FIXTURES: DeterminismFixture[] = [
       gasRemaining: 48068n,
       tapeHash: null,
       tapeLength: 0,
+    },
+  },
+  {
+    name: 'host-error-invalid',
+    program: {
+      ...BASE_PROGRAM,
+      code: `
+        (() => {
+          document("invalid/path");
+          return { marker: "det-invalid" };
+        })()
+      `.trim(),
+    },
+    input: DETERMINISM_INPUT,
+    gasLimit: DETERMINISM_GAS_LIMIT,
+    manifest: HOST_V1_MANIFEST,
+    createHost: createDeterminismHost,
+    expected: {
+      resultHash: null,
+      errorCode: 'INVALID_PATH',
+      errorTag: 'host/invalid_path',
+      gasUsed: 776n,
+      gasRemaining: 49224n,
+      tapeHash:
+        '79af1be3f347fffc766bbe0baef9a183f0d6ee206468954d8f2adb9c146b9ddc',
+      tapeLength: 1,
+    },
+  },
+  {
+    name: 'host-error-limit',
+    program: {
+      ...BASE_PROGRAM,
+      code: `
+        (() => {
+          document("limit/doc");
+          return { marker: "det-limit" };
+        })()
+      `.trim(),
+    },
+    input: DETERMINISM_INPUT,
+    gasLimit: DETERMINISM_GAS_LIMIT,
+    manifest: HOST_V1_MANIFEST,
+    createHost: createDeterminismHost,
+    expected: {
+      resultHash: null,
+      errorCode: 'LIMIT_EXCEEDED',
+      errorTag: 'host/limit',
+      gasUsed: 774n,
+      gasRemaining: 49226n,
+      tapeHash:
+        '4894237cf19c834c9bff793693a158be3443e56df132773f6c61c7aed456a088',
+      tapeLength: 1,
     },
   },
   {
