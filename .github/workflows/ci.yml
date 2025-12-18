@@ -57,13 +57,6 @@ jobs:
       # - run: pnpm exec nx-cloud record -- echo Hello World
       - run: pnpm exec nx affected -t lint test build typecheck
 
-      - name: Upload wasm artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: quickjs-wasm-build
-          path: libs/quickjs-wasm-build/dist
-          if-no-files-found: warn
-
       - name: Install Playwright browsers (Chromium)
         run: pnpm exec playwright install --with-deps chromium
 
