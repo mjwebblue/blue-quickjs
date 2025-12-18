@@ -5,6 +5,10 @@ import { bytesToHex } from '@noble/hashes/utils';
 const UINT32_MAX = 0xffffffff;
 const JS_PATH_SEGMENT = /^[A-Za-z0-9_-]+$/;
 const FORBIDDEN_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
+const RESERVED_ERROR_CODES = new Set([
+  'HOST_TRANSPORT',
+  'HOST_ENVELOPE_INVALID',
+]);
 
 export type AbiEffect = 'READ' | 'EMIT' | 'MUTATE';
 
@@ -368,8 +372,16 @@ function validateErrorCodes(codes: unknown[], path: string): AbiErrorCode[] {
 function validateErrorCode(value: unknown, path: string): AbiErrorCode {
   const code = expectPlainObject(value, path);
   enforceExactKeys(code, ['code', 'tag'], path);
+  const errorCode = expectNonEmptyString(code.code, `${path}.code`);
+  if (RESERVED_ERROR_CODES.has(errorCode)) {
+    throw error(
+      'INVALID_VALUE',
+      `error_codes may not include reserved code "${errorCode}"`,
+      `${path}.code`,
+    );
+  }
   return {
-    code: expectNonEmptyString(code.code, `${path}.code`),
+    code: errorCode,
     tag: expectNonEmptyString(code.tag, `${path}.tag`),
   };
 }

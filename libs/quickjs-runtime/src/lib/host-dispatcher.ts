@@ -213,6 +213,9 @@ export function createHostCallImport(
       ) {
         return UINT32_MAX;
       }
+      if (rangesOverlap(reqOffset, reqLength, respOffset, respCapacity)) {
+        return UINT32_MAX;
+      }
 
       const request = mem.subarray(reqOffset, reqOffset + reqLength);
       const result = dispatcher.dispatch(fn, request);
@@ -713,4 +716,16 @@ function withinBounds(
     return false;
   }
   return length <= view.byteLength - offset;
+}
+
+function rangesOverlap(
+  aOffset: number,
+  aLength: number,
+  bOffset: number,
+  bLength: number,
+): boolean {
+  if (aLength === 0 || bLength === 0) {
+    return false;
+  }
+  return aOffset < bOffset + bLength && bOffset < aOffset + aLength;
 }

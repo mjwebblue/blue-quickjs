@@ -34,7 +34,7 @@ jobs:
       # Cache node_modules
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: '.nvmrc'
           cache: 'pnpm'
 
       - name: Cache emsdk
@@ -58,7 +58,7 @@ jobs:
       - run: pnpm exec nx affected -t lint test build typecheck
 
       - name: Install Playwright browsers (Chromium)
-        run: npx playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Run smoke-web e2e
         run: pnpm nx run smoke-web:e2e

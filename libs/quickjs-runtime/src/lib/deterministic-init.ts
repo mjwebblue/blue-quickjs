@@ -22,6 +22,7 @@ type DetInitFn = (
 ) => number;
 
 type DetEvalFn = (code: string) => number;
+type DetSetGasLimitFn = (gasLimit: bigint) => number;
 type FreeOutputFn = (ptr: number) => void;
 type EnableTapeFn = (capacity: number) => number;
 type ReadTapeFn = () => number;
@@ -31,6 +32,7 @@ type ReadTraceFn = () => number;
 interface DeterministicExports {
   init: DetInitFn;
   eval: DetEvalFn;
+  setGasLimit: DetSetGasLimitFn;
   freeRuntime: () => void;
   freeOutput: FreeOutputFn;
   enableTape: EnableTapeFn;
@@ -41,6 +43,7 @@ interface DeterministicExports {
 
 export interface DeterministicVm {
   eval(code: string): string;
+  setGasLimit(limit: bigint | number): void;
   enableTape(capacity: number): void;
   readTape(): string;
   enableGasTrace(enabled: boolean): void;
@@ -108,6 +111,13 @@ export function initializeDeterministicVm(
       }
       return readAndFreeCString(runtime.module, ptr, ffi.freeOutput);
     },
+    setGasLimit(limit: bigint | number): void {
+      const normalized = normalizeGasLimit(limit);
+      const rc = ffi.setGasLimit(normalized);
+      if (rc !== 0) {
+        throw new Error('failed to set gas limit');
+      }
+    },
     enableTape(capacity: number): void {
       if (!Number.isInteger(capacity) || capacity < 0) {
         throw new Error(
@@ -160,6 +170,9 @@ function createDeterministicExports(
   const evalFn = module.cwrap('qjs_det_eval', 'number', [
     'string',
   ]) as unknown as DetEvalFn;
+  const setGasLimit = module.cwrap('qjs_det_set_gas_limit', 'number', [
+    'bigint',
+  ]) as unknown as DetSetGasLimitFn;
 
   const freeRuntime = module.cwrap(
     'qjs_det_free',
@@ -189,6 +202,7 @@ function createDeterministicExports(
   return {
     init,
     eval: evalFn,
+    setGasLimit,
     freeRuntime,
     freeOutput,
     enableTape,

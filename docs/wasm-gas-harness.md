@@ -2,11 +2,13 @@
 
 This documents the early wasm gas harness from T-029 (no host ABI) so P4 hardening can proceed without accidentally changing the P2 gas contracts.
 
+Baseline anchor: see `docs/baseline-1.md` (canonical gas) and `docs/baseline-2.md` (host ABI; this harness predates it).
+
 ## Stable for P2.5
 
 - Entry points and output format: `qjs_eval(code, gas_limit)` and `qjs_free_output(ptr)` emitting `RESULT|ERROR … GAS remaining=<n> used=<n> [TRACE …]` are relied on by the Node and browser gas harnesses.
 - Artifact names/paths: release + debug builds under `libs/quickjs-wasm-build/dist/quickjs-eval{,-debug}{,-wasm64}.{js,wasm}` resolved via `getQuickjsWasmArtifacts(<variant>, <buildType>)` (buildType defaults to `release`); harnesses import the ESM loader directly from that location.
-- wasm32 gas baselines are pinned by fixtures in `libs/test-harness/src/lib/gas-equivalence.spec.ts` and `apps/smoke-web/src/app/gas-fixtures.ts` (zero-precharge, gc-checkpoint-budget, loop-oog, constant, addition, string-repeat). wasm64 remains a debug-only variant intended to mirror native when available.
+- wasm32 gas baselines are pinned by fixtures in `libs/test-harness/src/lib/gas-equivalence.spec.ts` (zero-precharge, gc-checkpoint-budget, loop-oog, constant, addition, string-repeat). wasm64 remains a debug-only variant intended to mirror native when available; the browser smoke page now focuses on the Host.v1 baseline.
 - Core gas semantics from P2 (opcode/alloc/GC charging and OOG boundaries) plus the textual GAS reporting must stay stable even if the wasm build flags change.
 
 ## Temporary limitations (allowed to evolve in P4)

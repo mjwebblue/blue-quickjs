@@ -2,6 +2,8 @@
 
 Deterministic Wasm builds rely on a pinned Emscripten toolchain. We vendor `emsdk` locally under `tools/emsdk` and lock the version in `tools/scripts/emsdk-version.txt`.
 
+Baseline anchors: see `docs/baseline-1.md` (deterministic execution constraints) and `docs/baseline-2.md` (host ABI contract that must be consistent across environments).
+
 ## Pinned version
 - Emscripten/emsdk: `3.1.56` (see `tools/scripts/emsdk-version.txt`).
 - Install location: `tools/emsdk` (ignored from commits).

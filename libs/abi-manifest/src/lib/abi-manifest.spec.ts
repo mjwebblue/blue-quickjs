@@ -43,6 +43,48 @@ describe('abi-manifest', () => {
     expect(hash).toEqual(HOST_V1_HASH);
   });
 
+  it('hashes manifests deterministically regardless of key insertion order', () => {
+    const reordered = {
+      functions: HOST_V1_MANIFEST.functions.map((fn) => ({
+        error_codes: fn.error_codes.map((entry) => ({
+          tag: entry.tag,
+          code: entry.code,
+        })),
+        limits: fn.limits.arg_utf8_max
+          ? {
+              max_units: fn.limits.max_units,
+              arg_utf8_max: [...fn.limits.arg_utf8_max],
+              max_response_bytes: fn.limits.max_response_bytes,
+              max_request_bytes: fn.limits.max_request_bytes,
+            }
+          : {
+              max_response_bytes: fn.limits.max_response_bytes,
+              max_units: fn.limits.max_units,
+              max_request_bytes: fn.limits.max_request_bytes,
+            },
+        gas: {
+          k_units: fn.gas.k_units,
+          base: fn.gas.base,
+          k_ret_bytes: fn.gas.k_ret_bytes,
+          schedule_id: fn.gas.schedule_id,
+          k_arg_bytes: fn.gas.k_arg_bytes,
+        },
+        return_schema: { type: fn.return_schema.type },
+        arg_schema: fn.arg_schema.map((schema) => ({ type: schema.type })),
+        arity: fn.arity,
+        effect: fn.effect,
+        js_path: [...fn.js_path],
+        fn_id: fn.fn_id,
+      })),
+      abi_version: HOST_V1_MANIFEST.abi_version,
+      abi_id: HOST_V1_MANIFEST.abi_id,
+    } satisfies AbiManifest;
+
+    const { bytes, hash } = hashAbiManifest(reordered);
+    expect(new Uint8Array(bytes)).toEqual(HOST_V1_BYTES);
+    expect(hash).toEqual(HOST_V1_HASH);
+  });
+
   it('rejects unsorted functions', () => {
     const badManifest: AbiManifest = {
       ...HOST_V1_MANIFEST,
@@ -114,6 +156,22 @@ describe('abi-manifest', () => {
           error_codes: [
             { code: 'LIMIT_EXCEEDED', tag: 'host/limit' },
             { code: 'INVALID_PATH', tag: 'host/invalid_path' },
+          ],
+        },
+      ],
+    };
+
+    expect(() => validateAbiManifest(manifest)).toThrow(AbiManifestError);
+  });
+
+  it('rejects reserved host error codes', () => {
+    const manifest: AbiManifest = {
+      ...HOST_V1_MANIFEST,
+      functions: [
+        {
+          ...HOST_V1_MANIFEST.functions[0],
+          error_codes: [
+            { code: 'HOST_ENVELOPE_INVALID', tag: 'host/envelope_invalid' },
           ],
         },
       ],

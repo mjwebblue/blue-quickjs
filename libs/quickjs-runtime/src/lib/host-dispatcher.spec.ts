@@ -134,6 +134,24 @@ describe('host dispatcher', () => {
     expect(envelope).toEqual({ ok: { path: 'path/to/doc' }, units: 5 });
   });
 
+  it('returns transport sentinel on overlapping request/response ranges', () => {
+    const handlers = createHandlers();
+    const dispatcher = createHostDispatcher(HOST_V1_MANIFEST, handlers);
+    const memory = createMemory();
+    const hostCall = createHostCallImport(dispatcher, memory);
+
+    const request = encodeDv(['path/to/doc']);
+    const reqPtr = 64;
+    const reqLen = request.length;
+    const respPtr = reqPtr + reqLen - 1;
+    const respCap = 128;
+    const mem = new Uint8Array(memory.buffer);
+    mem.subarray(reqPtr, reqPtr + reqLen).set(request);
+
+    const written = hostCall(DOC_GET_ID, reqPtr, reqLen, respPtr, respCap);
+    expect(written).toBe(UINT32_MAX);
+  });
+
   it('returns transport sentinel for unknown fn_id', () => {
     const dispatcher = createHostDispatcher(HOST_V1_MANIFEST, createHandlers());
     const memory = createMemory();

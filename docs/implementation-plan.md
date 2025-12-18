@@ -6,6 +6,11 @@ This file is the “source of truth” execution plan for Codex (Cursor IDE) to 
 - A **manifest-locked, numeric-ID, single-dispatcher host ABI** (Baseline #2),
 - A **read-only Blue-style JS context** (`document()`, `event`, `steps`, `canon`) intended to be embedded by Blue’s external `document-processor`.
 
+Baseline anchors:
+
+- Baseline #1: `docs/baseline-1.md`
+- Baseline #2: `docs/baseline-2.md`
+
 This repo intentionally does **not** implement document overlay/commit logic. That remains the responsibility of `document-processor`.
 However, Baseline #2 still applies: even read-only `document(path)` is a host capability and must be exposed through the syscall/manifest/DV model.
 
@@ -1210,16 +1215,16 @@ Provide `document()`, `event`, `steps`, and `canon` helpers consistent with Blue
 
 **Detailed tasks:**
 
- - [x] Implement `document(path)` as a wrapper calling `Host.v1.document.get(path)`.
- - [x] Implement `document.canonical(path)` calling `Host.v1.document.getCanonical(path)`.
- - [x] Accept injected DV values for `event`, `eventCanonical`, `steps` from input envelope `I` (wired later).
- - [x] Implement `canon.unwrap` and `canon.at` as pure JS helpers (loaded deterministically by init).
- - [x] Freeze/lock `document`, `event`, `eventCanonical`, `steps`, `canon`.
+- [x] Implement `document(path)` as a wrapper calling `Host.v1.document.get(path)`.
+- [x] Implement `document.canonical(path)` calling `Host.v1.document.getCanonical(path)`.
+- [x] Accept injected DV values for `event`, `eventCanonical`, `steps` from input envelope `I` (wired later).
+- [x] Implement `canon.unwrap` and `canon.at` as pure JS helpers (loaded deterministically by init).
+- [x] Freeze/lock `document`, `event`, `eventCanonical`, `steps`, `canon`.
 
 **Acceptance criteria:**
 
- - [x] A test script can call `document("x")` and read `event`/`steps`.
- - [x] Helpers behave deterministically and cannot be overridden by user code.
+- [x] A test script can call `document("x")` and read `event`/`steps`.
+- [x] Helpers behave deterministically and cannot be overridden by user code.
 
 **Current state (P3 T-041):**
 
@@ -1306,7 +1311,7 @@ Compile the forked QuickJS to Wasm using pinned Emscripten.
 
 - [x] Add Nx build target invoking emcc on QuickJS sources + fork changes.
 - [x] Emit `.wasm` + loader/glue into deterministic `dist/` paths.
-- [x] Emit build metadata (engine build hash placeholder).
+- [x] Emit build metadata (engine build hash).
 
 **Acceptance criteria:**
 
@@ -1315,7 +1320,7 @@ Compile the forked QuickJS to Wasm using pinned Emscripten.
 **Current state (P4 T-050):**
 
 - `pnpm nx build quickjs-wasm-build` calls `scripts/build-wasm.sh` (emscripten 3.1.56) to emit `quickjs-eval{,-wasm64}.{js,wasm}` into `libs/quickjs-wasm-build/dist/` alongside compiled TS outputs.
-- Builds now emit `quickjs-wasm-build.metadata.json` capturing QuickJS version/commit, pinned emscripten version, per-variant artifact sizes and SHA-256 hashes, and a placeholder `engineBuildHash` (currently the wasm hash); helpers `getQuickjsWasmMetadataPath`/`readQuickjsWasmMetadata` expose the metadata.
+- Builds now emit `quickjs-wasm-build.metadata.json` capturing QuickJS version/commit, pinned emscripten version, per-variant artifact sizes and SHA-256 hashes, plus `engineBuildHash` (sha256 of wasm bytes, with the top-level hash pointing at wasm32 release when present); helpers `getQuickjsWasmMetadataPath`/`readQuickjsWasmMetadata` expose the metadata.
 
 ---
 
@@ -1663,42 +1668,54 @@ Prevent nondeterministic or unsupported return types from escaping the evaluator
 ### T-070: Node smoke runner (`apps/smoke-node`)
 
 **Phase:** P6 – Smoke apps
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-064
 
 **Goal:**
 Provide a CLI-like dev runner for quick debugging and fixtures.
 
+**Current state:**
+
+- `apps/smoke-node` bundles a sample `(P, I, G, manifest)` using the Host.v1 fixture and mock host handlers, runs `evaluate()`, and prints a stable summary (DV hash, gas used/remaining, host tape count, optional error code/tag).
+- `--debug` expands DV payloads and emitted values; `--quiet` suppresses logs.
+- `pnpm nx serve smoke-node [-- --debug|--quiet]` builds then runs the sample deterministically.
+
 **Detailed tasks:**
 
-- [ ] Load sample fixture `(P, I, G, manifest)` and create a mock host implementation.
-- [ ] Run evaluate and print a stable summary: result DV hash, gas used, tape count, error code/tag.
-- [ ] Provide a “debug” mode that prints decoded DV JSON (still deterministic).
+- [x] Load sample fixture `(P, I, G, manifest)` and create a mock host implementation.
+- [x] Run evaluate and print a stable summary: result DV hash, gas used, tape count, error code/tag.
+- [x] Provide a “debug” mode that prints decoded DV JSON (still deterministic).
 
 **Acceptance criteria:**
 
-- [ ] `pnpm nx serve smoke-node` runs a sample deterministically.
+- [x] `pnpm nx serve smoke-node` runs a sample deterministically.
 
 ---
 
 ### T-071: Browser smoke runner (`apps/smoke-web`)
 
 **Phase:** P6 – Smoke apps
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-064, T-053
 
 **Goal:**
 Run the same fixtures in browser and show stable results and wasm hash.
 
+**Current state:**
+
+- `apps/smoke-web` loads the wasm via `@blue-quickjs/quickjs-wasm`, instantiates with the Host.v1 manifest/handlers from `@blue-quickjs/test-harness`, runs the same `(P, I, G)` fixture as smoke-node through `evaluate`, and renders wasm hash/result hash/gas/tape hash/emit count plus manifest + engine hashes.
+- Playwright smoke (`apps/smoke-web/tests/smoke.spec.ts`) starts Vite, waits for completion, and asserts all metrics match the Node baseline; the legacy gas fixtures UI/tests have been removed.
+
 **Detailed tasks:**
 
-- [ ] Load wasm from `quickjs-wasm`.
-- [ ] Run the same fixture set as Node.
-- [ ] Display: wasm hash, result hash, gas used, error code/tag, tape hash.
+- [x] Load wasm from `quickjs-wasm` and instantiate via `evaluate` with the Host.v1 manifest/handlers.
+- [x] Run the shared smoke fixture from `@blue-quickjs/test-harness` (same `(P, I, G)` as smoke-node).
+- [x] Display wasm hash, result hash, gas used/remaining, error code/tag, tape hash, host emit count, and manifest/engine hashes.
+- [x] Add a Playwright check that waits for completion and asserts all metrics match the Node baseline.
 
 **Acceptance criteria:**
 
-- [ ] Browser output matches Node output for the same fixtures.
+- [x] Browser output matches the Node baseline for the Host.v1 smoke fixture and exposes the wasm hash in the UI/Playwright smoke.
 
 ---
 
@@ -1707,7 +1724,7 @@ Run the same fixtures in browser and show stable results and wasm hash.
 ### T-080: Cross-environment determinism harness (Node vs headless browser)
 
 **Phase:** P7 – Determinism & CI
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-071, T-028, T-064
 
 **Goal:**
@@ -1715,26 +1732,28 @@ Prove Baseline determinism: same `(P, I, G)` yields identical outputs and OOG po
 
 **Baseline references:** Baseline #1 §1–§2; Baseline #2 §0.3
 
+**Current state:** Playwright runs smoke-web headlessly; determinism and gas fixtures live in `libs/test-harness` and are asserted in `apps/smoke-node` + `apps/smoke-web/tests` with cross-env equality (DV hash, errors, gas, tape).
+
 **Detailed tasks:**
 
-- [ ] Set up Playwright to run `smoke-web` headlessly or run a direct test page.
-- [ ] Create fixtures in `libs/test-harness`: P, I, G, manifest bytes + expected hashes.
-- [ ] Compare Node vs browser outputs:
-  - [ ] returned DV bytes hash,
-  - [ ] error code/tag (if any),
-  - [ ] gas used/remaining,
-  - [ ] tape hash (if enabled).
+- [x] Set up Playwright to run `smoke-web` headlessly or run a direct test page.
+- [x] Create fixtures in `libs/test-harness`: P, I, G, manifest bytes + expected hashes.
+- [x] Compare Node vs browser outputs:
+  - [x] returned DV bytes hash,
+  - [x] error code/tag (if any),
+  - [x] gas used/remaining,
+  - [x] tape hash (if enabled).
 
 **Acceptance criteria:**
 
-- [ ] At least 5 fixtures pass cross-env with exact equality of compared fields.
+- [x] At least 5 fixtures pass cross-env with exact equality of compared fields.
 
 ---
 
 ### T-081: Host-call determinism + gas-by-size/units tests
 
 **Phase:** P7 – Determinism & CI
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-042, T-061, T-080
 
 **Goal:**
@@ -1742,23 +1761,29 @@ Verify host-call charging and deterministic behavior for document reads.
 
 **Baseline references:** Baseline #2 §3.2–§3.4
 
+**Current state (P7 T-081):**
+
+- Added host-call-heavy determinism fixtures (varying path lengths + error cases) in `libs/test-harness`.
+- Node + browser determinism suites now cover these fixtures and compare DV hash, gas used/remaining, and tape hash (which includes per-call gas pre/post charges).
+- Host-call OOG boundary behavior remains covered by the native harness tests introduced in T-042 to avoid duplication.
+
 **Detailed tasks:**
 
-- [ ] Add fixtures that call `document()` repeatedly with varying paths.
-- [ ] Use mock host that returns deterministic DV and units.
-- [ ] Assert gas formula correctness (pre/post charge) and OOG boundaries on host calls.
-- [ ] Assert deterministic Err responses for invalid path/not found/limit exceeded.
+- [x] Add fixtures that call `document()` repeatedly with varying paths.
+- [x] Use mock host that returns deterministic DV and units.
+- [x] Assert gas formula correctness (pre/post charge) and OOG boundaries on host calls.
+- [x] Assert deterministic Err responses for invalid path/not found/limit exceeded.
 
 **Acceptance criteria:**
 
-- [ ] Gas and errors match exactly across Node/browser for host-call-heavy scripts.
+- [x] Gas and errors match exactly across Node/browser for host-call-heavy scripts.
 
 ---
 
 ### T-082: Manifest pinning tests (wrong hash, wrong manifest, wrong fn_id mapping)
 
 **Phase:** P7 – Determinism & CI
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-036, T-064
 
 **Goal:**
@@ -1768,20 +1793,26 @@ Ensure ABI pinning is enforced deterministically.
 
 **Detailed tasks:**
 
-- [ ] Test: manifest hash mismatch fails deterministically.
-- [ ] Test: manifest entry order changes but canonical serialization yields same hash (if canonicalized).
-- [ ] Test: unknown fn_id invoked fails deterministically.
+- [x] Test: manifest hash mismatch fails deterministically.
+- [x] Test: manifest entry order changes but canonical serialization yields same hash (if canonicalized).
+- [x] Test: unknown fn_id invoked fails deterministically.
 
 **Acceptance criteria:**
 
-- [ ] All ABI mismatch scenarios are deterministic and code/tag stable.
+- [x] All ABI mismatch scenarios are deterministic and code/tag stable.
+
+**Current state (P7 T-082):**
+
+- Manifest hash mismatch is covered in `libs/quickjs-runtime/src/lib/deterministic-init.spec.ts`.
+- Canonicalization parity (hash stable under key reordering) is covered in `libs/abi-manifest/src/lib/abi-manifest.spec.ts`.
+- Unknown `fn_id` dispatch is covered in `libs/quickjs-runtime/src/lib/host-dispatcher.spec.ts` and surfaced as `HOST_TRANSPORT` in `libs/quickjs-runtime/src/lib/evaluate.spec.ts`.
 
 ---
 
 ### T-083: CI pipeline (build, test, wasm build, browser tests)
 
 **Phase:** P7 – Determinism & CI
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-080, T-004
 
 **Goal:**
@@ -1789,21 +1820,26 @@ Add CI that builds and tests everything including headless browser determinism a
 
 **Detailed tasks:**
 
-- [ ] Add CI workflow steps: install, lint, unit tests, native harness tests, wasm build, Playwright tests.
-- [ ] Cache pnpm store and emsdk.
-- [ ] Upload wasm artifacts as CI artifacts (optional).
+- [x] Add CI workflow steps: install, lint, unit tests, native harness tests, wasm build, Playwright tests.
+- [x] Cache pnpm store and emsdk.
+- [x] Upload wasm artifacts as CI artifacts (optional).
 
 **Acceptance criteria:**
 
-- [ ] CI passes from a clean checkout.
-- [ ] Determinism tests are not flaky.
+- [x] CI passes from a clean checkout.
+- [x] Determinism tests are not flaky.
+
+**Current state (P7 T-083):**
+
+- CI runs lint/typecheck/test/build across all projects, installs/caches emsdk, executes Playwright smoke tests, and uploads wasm artifacts from `libs/quickjs-wasm-build/dist`.
+- Node version is sourced from `.nvmrc`, with pnpm caching enabled.
 
 ---
 
 ### T-084: Documentation hardening (make docs normative)
 
 **Phase:** P7 – Determinism & CI
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-080
 
 **Goal:**
@@ -1811,21 +1847,21 @@ Update docs to match implementation and tests.
 
 **Detailed tasks:**
 
-- [ ] Finalize determinism profile doc (exact allowed/disabled APIs).
-- [ ] Finalize gas schedule doc (opcode costs, builtin costs, alloc/GC, host call costs).
-- [ ] Finalize DV wire format and manifest docs with examples.
-- [ ] Add “Determinism checklist” in root README.
+- [x] Finalize determinism profile doc (exact allowed/disabled APIs).
+- [x] Finalize gas schedule doc (opcode costs, builtin costs, alloc/GC, host call costs).
+- [x] Finalize DV wire format and manifest docs with examples.
+- [x] Add “Determinism checklist” in root README.
 
 **Acceptance criteria:**
 
-- [ ] Docs contain testable statements that match harness assertions.
+- [x] Docs contain testable statements that match harness assertions.
 
 ---
 
 ### T-085: Release packaging strategy (pin engine + ABI)
 
 **Phase:** P7 – Determinism & CI
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-053, T-064
 
 **Goal:**
@@ -1835,14 +1871,47 @@ Define versioning/publishing so consumers can pin engine/ABI reliably.
 
 **Detailed tasks:**
 
-- [ ] Define publishing for `quickjs-wasm`, `quickjs-runtime`, `dv`, `abi-manifest`.
-- [ ] Define how `engine_build_hash` is computed and exposed.
-- [ ] Define semver policy: what changes require new engine hash, new manifest, or new fn_id.
-- [ ] Add release checklist doc.
+- [x] Define publishing for `quickjs-wasm`, `quickjs-runtime`, `dv`, `abi-manifest`.
+- [x] Define how `engine_build_hash` is computed and exposed.
+- [x] Define semver policy: what changes require new engine hash, new manifest, or new fn_id.
+- [x] Add release checklist doc.
 
 **Acceptance criteria:**
 
-- [ ] Release policy is documented and aligns with P pinning requirements.
+- [x] Release policy is documented and aligns with P pinning requirements.
+
+**Current state (P7 T-085):**
+
+- Added `docs/release-policy.md` covering published packages, engine/manifest hash definitions, and semver/hash/fn_id policy.
+- Added `docs/release-checklist.md` with preflight, build, hash verification, and publishing steps.
+
+---
+
+# Phase P8 — Legacy wasm harness cleanup
+
+### T-090: Retire legacy wasm JSON gas harness and consolidate docs
+
+**Phase:** P8 – Legacy wasm harness cleanup
+**Status:** TODO
+**Depends on:** T-053, T-063, T-064
+
+**Goal:**
+Remove the pre-ABI `qjs_eval`/`qjs_free_output` JSON harness, move wasm consumers/tests to the deterministic ABI path, and fold any still-relevant notes into canonical docs so `docs/wasm-gas-harness.md` can be deleted.
+
+**Current state:**
+Wasm build still exports `qjs_eval` for gas fixtures; tests in `libs/test-harness`, `libs/quickjs-wasm`, and `libs/quickjs-runtime` parse the legacy `RESULT|ERROR … GAS …` output. The temporary doc `docs/wasm-gas-harness.md` is the only place this legacy contract is described.
+
+**Detailed tasks:**
+
+- [ ] Update wasm-facing tests to use the deterministic ABI entrypoints: drive `qjs_det_init`/`qjs_det_eval` with the manifest + DV payloads in `libs/test-harness/src/lib/gas-equivalence.spec.ts`, `libs/quickjs-wasm/src/lib/quickjs-wasm.spec.ts`, and `libs/quickjs-runtime/src/lib/runtime.spec.ts`; rebaseline gas expectations from the ABI path.
+- [ ] Remove legacy exports from the wasm harness: drop `qjs_eval`/`qjs_free_output` from `libs/quickjs-wasm-build/src/wasm/quickjs_wasm.c` and from the exported symbols list in `libs/quickjs-wasm-build/scripts/build-wasm.sh`; update `libs/quickjs-wasm-build/README.md` to describe only the deterministic ABI entrypoints.
+- [ ] Consolidate documentation: migrate any persistent artifact path/metadata notes from `docs/wasm-gas-harness.md` into the appropriate canonical doc (`docs/toolchain.md` or this plan’s P4 state) and remove `docs/wasm-gas-harness.md` plus its reference in this file.
+
+**Acceptance criteria:**
+
+- [ ] No tests or harnesses call `qjs_eval` or parse the legacy `RESULT|ERROR … GAS …` format; ABI/DV-based entrypoints are used instead.
+- [ ] Wasm build outputs expose only the deterministic ABI exports, and README/build scripts match.
+- [ ] `docs/wasm-gas-harness.md` is deleted and any needed stable details live in existing canonical docs.
 
 ---
 

@@ -141,6 +141,42 @@ describe('evaluate', () => {
     expect(result.error.tag).toBe('host/not_found');
   });
 
+  it('maps host transport failures to a stable code/tag', async () => {
+    const handlers = createHandlers({
+      document: {
+        get: vi.fn(
+          () =>
+            ({
+              ok: { path: 'path/to/doc' },
+            }) as unknown as ReturnType<
+              HostDispatcherHandlers['document']['get']
+            >,
+        ),
+      },
+    });
+
+    const result = await evaluate({
+      program: BASE_PROGRAM,
+      input: BASE_INPUT,
+      gasLimit: TEST_GAS_LIMIT,
+      manifest: HOST_V1_MANIFEST,
+      handlers,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error('expected host transport error');
+    }
+
+    expect(result.type).toBe('vm-error');
+    expect(result.error.kind).toBe('host-error');
+    if (result.error.kind !== 'host-error') {
+      throw new Error('expected host-error');
+    }
+    expect(result.error.code).toBe('HOST_TRANSPORT');
+    expect(result.error.tag).toBe('host/transport');
+  });
+
   it('surfaces OutOfGas as a stable code/tag', async () => {
     const result = await evaluate({
       program: { ...BASE_PROGRAM, code: 'let n = 0; while (true) { n += 1; }' },

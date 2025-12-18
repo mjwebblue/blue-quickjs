@@ -264,6 +264,17 @@ char *qjs_det_eval(const char *code) {
 }
 
 EMSCRIPTEN_KEEPALIVE
+int qjs_det_set_gas_limit(uint64_t gas_limit) {
+  if (!det_ctx || !det_rt) {
+    return -1;
+  }
+
+  det_gas_limit = gas_limit;
+  JS_SetGasLimit(det_ctx, gas_limit);
+  return 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
 void qjs_det_free(void) { free_det_runtime(); }
 
 EMSCRIPTEN_KEEPALIVE

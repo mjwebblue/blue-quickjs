@@ -10,7 +10,17 @@
     "types": ["node"]
   },
   "include": ["src/**/*.ts"],
-  "references": [],
+  "references": [
+    {
+      "path": "../../libs/quickjs-runtime/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/test-harness/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/dv/tsconfig.lib.json"
+    }
+  ],
   "exclude": [
     "vite.config.ts",
     "vite.config.mts",

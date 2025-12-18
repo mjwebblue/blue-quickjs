@@ -1,10 +1,12 @@
 {
   "name": "@blue-quickjs/smoke-web",
   "version": "0.0.1",
+  "type": "module",
   "private": true,
   "dependencies": {
+    "@blue-quickjs/dv": "workspace:*",
+    "@blue-quickjs/quickjs-wasm": "workspace:*",
     "@blue-quickjs/quickjs-runtime": "workspace:*",
-    "@blue-quickjs/quickjs-wasm-build": "workspace:*",
     "@blue-quickjs/test-harness": "workspace:*"
   },
   "nx": {
@@ -13,7 +15,7 @@
       "e2e": {
         "executor": "nx:run-commands",
         "options": {
-          "command": "pnpm nx run quickjs-wasm-build:build && pnpm playwright test apps/smoke-web/tests --config apps/smoke-web/playwright.config.cts",
+          "command": "pnpm nx run-many -t build --projects=quickjs-wasm-build,test-harness && pnpm playwright test apps/smoke-web/tests --config apps/smoke-web/playwright.config.cts",
           "cwd": "."
         }
       }
