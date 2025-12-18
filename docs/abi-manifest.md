@@ -11,9 +11,9 @@ The ABI manifest maps **numeric function IDs** to host capabilities and is the s
 
 ### Top-level fields
 
-- `abi_id` (string): Stable namespace for this manifest (e.g., `"Host.v1"`). This is the string baked into `P`.
-- `abi_version` (uint32): Monotonic version for this ABI surface. Increment when adding/removing functions or changing gas/limits. Initial value: `1`.
-- `functions` (array): Ordered by ascending `fn_id`. Each entry is a map described below. `fn_id` values MUST be unique.
+- `abi_id` (string): Must be `"Host.v1"` in the current implementation (validation rejects other values). This is the string baked into `P`.
+- `abi_version` (uint32): Must be `1` in the current implementation (validation rejects other values).
+- `functions` (array): Ordered by ascending `fn_id` and must contain at least one entry. Each entry is a map described below. `fn_id` values MUST be unique.
 
 No other top-level keys are permitted; unknown keys make the manifest invalid.
 
@@ -28,7 +28,7 @@ Each function is a DV map with the following fields (no extras):
 - `arg_schema` (array): Length MUST equal `arity`. Each item is a schema map (see **Schema language** below).
 - `return_schema` (map): Schema describing the return value (see **Schema language**).
 - `gas` (map): Gas parameters for two-phase charging:
-  - `schedule_id` (string): Identifier for the gas schedule entry (ties into `docs/gas-schedule.md`).
+  - `schedule_id` (string): Identifier for the gas schedule entry (ties into `docs/gas-schedule.md`). The VM does not validate this value; it is for audit/traceability.
   - `base` (uint32): Pre-charge base units per call.
   - `k_arg_bytes` (uint32): Pre-charge multiplier for request bytes.
   - `k_ret_bytes` (uint32): Post-charge multiplier for **response envelope bytes**.
@@ -64,6 +64,11 @@ Unknown `type` values or extra keys make the manifest invalid.
   - Unknown keys make the response invalid.
   - `units` MUST satisfy `0 <= units <= max_units`.
   - For `err`, `code` MUST be listed in the manifest `error_codes`; the VM derives the error `tag` from the manifest mapping for that code. Responses with unknown codes are invalid.
+
+Example envelopes:
+
+- Ok: `{ "ok": { "path": "doc" }, "units": 9 }`
+- Err: `{ "err": { "code": "NOT_FOUND" }, "units": 2 }`
 
 `max_response_bytes` applies to the entire encoded response envelope. `max_units` applies to the `units` field in either envelope shape.
 
@@ -136,9 +141,9 @@ When canonically DV-encoded, these bytes are hashed with SHA-256 to produce the 
 
 - Reject manifests that include unknown keys, out-of-range integers (including `-0`), unsorted `functions`/`error_codes`, or duplicate `fn_id`/`code`.
 - Reject `js_path` collisions: no two entries may share the same `js_path`, and no `js_path` may be a prefix of another.
- - Enforce `arity === arg_schema.length` and (if present) `arg_utf8_max.length === arity`; if provided, `arg_utf8_max[i]` requires `arg_schema[i].type` to be `"string"`. Because `arg_utf8_max` must cover every argument, manifests may only include it when **all** arguments are strings.
+- Enforce `arity === arg_schema.length` and (if present) `arg_utf8_max.length === arity`; if provided, `arg_utf8_max[i]` requires `arg_schema[i].type` to be `"string"`. Because `arg_utf8_max` must cover every argument, manifests may only include it when **all** arguments are strings.
 - `max_request_bytes`/`max_response_bytes` MUST be <= DV global max (1 MiB encoded) and non-zero; they apply to the fully encoded request array / response envelope bytes.
-- Gas parameters must be non-negative integers; schedules referenced by `schedule_id` must exist in the gas schedule doc/code. Gas arithmetic MUST be performed with explicit overflow checks (e.g., 64-bit intermediates); overflow during manifest validation invalidates the manifest.
+- Gas parameters must be non-negative integers; `schedule_id` is an opaque identifier and is not validated by the VM. Gas arithmetic MUST be performed with explicit overflow checks (e.g., 64-bit intermediates); overflow during manifest validation invalidates the manifest.
 - `error_codes` is a set of allowed host error variants represented as an array sorted by `code` for canonical encoding.
 - Responses must obey the envelope rules above: exactly one of `ok`/`err`, `units` within bounds, no extra keys, and `err.code` MUST exist in `error_codes` (tag is derived from the manifest mapping).
 

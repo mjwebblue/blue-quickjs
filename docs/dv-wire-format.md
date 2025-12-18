@@ -50,7 +50,7 @@ Forbidden: CBOR tags (`0xc0`…), indefinite lengths (`0x5f/0x7f/0x9f/0xbf`), si
   - Maximum string byte length: 256 KiB.
   - Maximum array items: 65,535; maximum map entries: 65,535.
   - Implementations may impose stricter per-call limits (e.g., manifest-bound request/response sizes) but must not exceed these without an explicit opt-in.
-- **Error handling:** Any violation (forbidden type, bad UTF-8, NaN/Inf, limits exceeded, unsorted/duplicate keys, non-canonical integer width) is a deterministic DV-format error.
+- **Error handling:** Any violation (forbidden type, bad UTF-8, NaN/Inf, limits exceeded, unsorted/duplicate keys, non-canonical integer width, trailing bytes) is a deterministic DV-format error.
 
 ## Why these limits exist
 

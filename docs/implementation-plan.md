@@ -1834,7 +1834,7 @@ Add CI that builds and tests everything including headless browser determinism a
 ### T-084: Documentation hardening (make docs normative)
 
 **Phase:** P7 – Determinism & CI
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-080
 
 **Goal:**
@@ -1842,14 +1842,14 @@ Update docs to match implementation and tests.
 
 **Detailed tasks:**
 
-- [ ] Finalize determinism profile doc (exact allowed/disabled APIs).
-- [ ] Finalize gas schedule doc (opcode costs, builtin costs, alloc/GC, host call costs).
-- [ ] Finalize DV wire format and manifest docs with examples.
-- [ ] Add “Determinism checklist” in root README.
+- [x] Finalize determinism profile doc (exact allowed/disabled APIs).
+- [x] Finalize gas schedule doc (opcode costs, builtin costs, alloc/GC, host call costs).
+- [x] Finalize DV wire format and manifest docs with examples.
+- [x] Add “Determinism checklist” in root README.
 
 **Acceptance criteria:**
 
-- [ ] Docs contain testable statements that match harness assertions.
+- [x] Docs contain testable statements that match harness assertions.
 
 ---
 

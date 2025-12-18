@@ -23,3 +23,10 @@ Deterministic QuickJS-in-Wasm evaluator monorepo (Nx + pnpm), tracking a hardene
 - DV wire format: `docs/dv-wire-format.md`
 - ABI manifest: `docs/abi-manifest.md`
 - Host call ABI: `docs/host-call-abi.md`
+
+## Determinism checklist
+- Same `(P, I, G)` yields identical result bytes, gas used/remaining, and host-call tape hashes across Node and browser.
+- Deterministic capability profile: time/random/async/IO/typed arrays/WebAssembly disabled; use `Host.v1` for IO (`docs/determinism-profile.md`).
+- Canonical gas: opcode/builtin/allocation/GC charges plus two-phase host-call gas (`docs/gas-schedule.md`).
+- DV and manifest: canonical DV encoding, safe numeric range, sorted keys, size caps, manifest hash pinning (`docs/dv-wire-format.md`, `docs/abi-manifest.md`).
+- Host ABI: `host_call` envelope, deterministic error mapping, and reentrancy rules (`docs/host-call-abi.md`).
