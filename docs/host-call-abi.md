@@ -1,8 +1,11 @@
 # Host Call ABI (Baseline #2)
 
+Baseline anchor: see `docs/baseline-2.md`.
+
 Scope: describe the single-dispatcher syscall (`host_call`) and generated `Host.v1` surface per Baseline #2 (e.g., §1.5, §2, §6.4, §9).
 
 ## Goals
+
 - Define the Wasm import shape for `host_call` and the memory ownership contract.
 - Describe request/response bytes (DV), limits, and deterministic error handling.
 - Explain how this import underpins the generated `Host.v1` surface and ergonomic globals.
@@ -17,10 +20,11 @@ All Wasm builds use wasm32 with a single exported `memory` (little-endian data l
 ```
 
 Parameter meanings (all interpreted as `uint32` on the host side):
+
 - `fn_id`: manifest function id (MUST be >= 1)
 - `req_ptr`, `req_len`: request byte slice `[req_ptr, req_ptr + req_len)`
 - `resp_ptr`, `resp_capacity`: response scratch slice `[resp_ptr, resp_ptr + resp_capacity)`
-Return value: `resp_len` (uint32) or the sentinel `0xffffffff`.
+  Return value: `resp_len` (uint32) or the sentinel `0xffffffff`.
 
 Params are wasm `i32` values (module/name as shown above) and MUST be interpreted as unsigned `uint32` on the host side (e.g., `>>> 0` in JS) since JavaScript receives them as signed Numbers. Endianness does **not** apply to the params themselves; they are register values. The request/response **bytes** follow DV/CBOR rules, which are big-endian where CBOR specifies (see `docs/dv-wire-format.md`).
 

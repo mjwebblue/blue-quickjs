@@ -1,5 +1,7 @@
 # DV Wire Format (Baseline #2)
 
+Baseline anchor: see `docs/baseline-2.md`.
+
 Scope: normative description of the deterministic value (DV) encoding/decoding rules per Baseline #2 (e.g., §1.4, §6.4).
 
 ## Terminology: “wire format” vs “in-memory value”

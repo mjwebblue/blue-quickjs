@@ -1,5 +1,7 @@
 # ABI Manifest (Baseline #2)
 
+Baseline anchor: see `docs/baseline-2.md`.
+
 The ABI manifest maps **numeric function IDs** to host capabilities and is the single source of truth for generating `Host.v1` and validating host responses. The manifest is canonicalized and hashed; both the VM and host dispatcher must consume identical bytes (Baseline #2 §1.1–§1.4, §6.1–§6.3).
 
 ## Canonical structure
@@ -95,8 +97,19 @@ This example covers the minimal read-only surface required by the evaluator. Gas
       "arity": 1,
       "arg_schema": [{ "type": "string" }],
       "return_schema": { "type": "dv" },
-      "gas": { "schedule_id": "doc-read-v1", "base": 20, "k_arg_bytes": 1, "k_ret_bytes": 1, "k_units": 1 },
-      "limits": { "max_request_bytes": 4096, "max_response_bytes": 262144, "max_units": 1000, "arg_utf8_max": [2048] },
+      "gas": {
+        "schedule_id": "doc-read-v1",
+        "base": 20,
+        "k_arg_bytes": 1,
+        "k_ret_bytes": 1,
+        "k_units": 1
+      },
+      "limits": {
+        "max_request_bytes": 4096,
+        "max_response_bytes": 262144,
+        "max_units": 1000,
+        "arg_utf8_max": [2048]
+      },
       "error_codes": [
         { "code": "INVALID_PATH", "tag": "host/invalid_path" },
         { "code": "LIMIT_EXCEEDED", "tag": "host/limit" },
@@ -110,8 +123,19 @@ This example covers the minimal read-only surface required by the evaluator. Gas
       "arity": 1,
       "arg_schema": [{ "type": "string" }],
       "return_schema": { "type": "dv" },
-      "gas": { "schedule_id": "doc-read-v1", "base": 20, "k_arg_bytes": 1, "k_ret_bytes": 1, "k_units": 1 },
-      "limits": { "max_request_bytes": 4096, "max_response_bytes": 262144, "max_units": 1000, "arg_utf8_max": [2048] },
+      "gas": {
+        "schedule_id": "doc-read-v1",
+        "base": 20,
+        "k_arg_bytes": 1,
+        "k_ret_bytes": 1,
+        "k_units": 1
+      },
+      "limits": {
+        "max_request_bytes": 4096,
+        "max_response_bytes": 262144,
+        "max_units": 1000,
+        "arg_utf8_max": [2048]
+      },
       "error_codes": [
         { "code": "INVALID_PATH", "tag": "host/invalid_path" },
         { "code": "LIMIT_EXCEEDED", "tag": "host/limit" },
@@ -125,11 +149,19 @@ This example covers the minimal read-only surface required by the evaluator. Gas
       "arity": 1,
       "arg_schema": [{ "type": "dv" }],
       "return_schema": { "type": "null" },
-      "gas": { "schedule_id": "emit-v1", "base": 5, "k_arg_bytes": 1, "k_ret_bytes": 0, "k_units": 1 },
-      "limits": { "max_request_bytes": 32768, "max_response_bytes": 64, "max_units": 1024 },
-      "error_codes": [
-        { "code": "LIMIT_EXCEEDED", "tag": "host/limit" }
-      ]
+      "gas": {
+        "schedule_id": "emit-v1",
+        "base": 5,
+        "k_arg_bytes": 1,
+        "k_ret_bytes": 0,
+        "k_units": 1
+      },
+      "limits": {
+        "max_request_bytes": 32768,
+        "max_response_bytes": 64,
+        "max_units": 1024
+      },
+      "error_codes": [{ "code": "LIMIT_EXCEEDED", "tag": "host/limit" }]
     }
   ]
 }

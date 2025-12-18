@@ -2,6 +2,8 @@
 
 This documents the early wasm gas harness from T-029 (no host ABI) so P4 hardening can proceed without accidentally changing the P2 gas contracts.
 
+Baseline anchor: see `docs/baseline-1.md` (canonical gas) and `docs/baseline-2.md` (host ABI; this harness predates it).
+
 ## Stable for P2.5
 
 - Entry points and output format: `qjs_eval(code, gas_limit)` and `qjs_free_output(ptr)` emitting `RESULT|ERROR … GAS remaining=<n> used=<n> [TRACE …]` are relied on by the Node and browser gas harnesses.

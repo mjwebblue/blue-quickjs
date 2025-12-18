@@ -1,5 +1,7 @@
 # Gas Schedule (Baseline #1)
 
+Baseline anchor: see `docs/baseline-1.md` (determinism + canonical gas) and `docs/baseline-2.md` (host-call ABI/gas parameters).
+
 Scope: define canonical gas units for QuickJS execution and host calls per Baseline #1. This document is normative and must match harness assertions.
 
 ## Gas version and limits

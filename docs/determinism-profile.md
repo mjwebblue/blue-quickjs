@@ -1,5 +1,7 @@
 # Determinism Profile (Baseline #1)
 
+Baseline anchor: see `docs/baseline-1.md`.
+
 Scope: capture the deterministic VM configuration required by Baseline #1 for both native and Wasm builds. This document is normative and must match harness assertions.
 
 ## Deterministic init entrypoints
