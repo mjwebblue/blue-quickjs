@@ -55,6 +55,158 @@ Notes:
   `TypeError: console is disabled in deterministic mode`. Other `console.*` members are absent
   unless user code adds them.
 
+## Rationale for disabled / stubbed / absent APIs (informative)
+
+Deterministic mode is intended to be **bit-for-bit reproducible** given the same:
+
+1. program bytes,
+2. ABI manifest bytes + hash,
+3. context blob, and
+4. host responses.
+
+To make that property realistic (and to keep gas/metering tractable), the profile removes
+or stubs JS features that:
+
+- read ambient state (time, environment, entropy),
+- introduce scheduler-dependent ordering (async jobs, timers, concurrency),
+- expose platform-dependent representations (byte layouts, NaN payloads),
+- have large/engine-version-dependent performance cliffs (hard to meter deterministically), or
+- bypass the capability model (any I/O must go through manifest-defined `Host.v1` calls).
+
+### Dynamic code generation
+
+Disabled:
+
+- `eval`, `Function`, and all Function-constructor paths.
+
+Why:
+
+- **Auditing / capability control:** deterministic runs should execute only the code supplied up front.
+  Dynamic compilation makes it harder to reason about what code will run and to enforce a stable,
+  minimal surface.
+- **Deterministic metering:** parse/compile cost depends on input size and internal compiler details;
+  charging it deterministically is possible but adds complexity and version coupling.
+
+### Time, scheduling, and asynchrony
+
+Absent/disabled:
+
+- `Date`
+- `setTimeout` / `setInterval`
+- `queueMicrotask`
+- `Promise`
+
+Why:
+
+- **Ambient time + host event loop:** wall-clock time, timer resolution, and task scheduling are not
+  part of the deterministic transcript, so they would diverge across hosts and runs.
+- **Ordering:** microtask/task ordering depends on host integration and re-entrancy points; keeping the
+  execution model strictly run-to-completion avoids “who scheduled first?” nondeterminism.
+
+### Randomness / entropy
+
+Disabled:
+
+- `Math.random()`
+
+Why:
+
+- **Entropy source:** any RNG seeded from time/OS entropy breaks reproducibility.
+- **Accidental native RNG use:** seeding the internal RNG to a constant (while still throwing at the JS
+  surface) keeps any unintended native RNG usage deterministic.
+
+### Binary buffers, shared memory, and low-level representation
+
+Disabled:
+
+- `ArrayBuffer`, `DataView`, typed arrays (`Uint8Array`, `Float64Array`, …)
+- `SharedArrayBuffer`
+- `Atomics`
+
+Why:
+
+- **Representation leaks:** typed views can observe IEEE-754 edge cases like NaN payload bits and `-0`
+  canonicalization, which can vary across engines/architectures/toolchains even when “numeric” results
+  look equivalent at a higher level.
+- **Metering + resource bounds:** bulk byte operations can move a lot of data per op; without a very
+  careful cost model they are an easy way to create large, host-dependent execution time/memory usage.
+- **Concurrency:** `SharedArrayBuffer` + `Atomics` require multi-agent semantics; thread scheduling and
+  race outcomes are inherently nondeterministic unless the entire scheduler is part of the transcript.
+
+### WebAssembly
+
+Disabled:
+
+- `WebAssembly`
+
+Why:
+
+- **Second VM / semantics surface:** it introduces a second execution engine with its own edge cases
+  (notably around floating-point NaNs and traps), expanding the “things that must be identical” across
+  platforms.
+- **Metering:** Wasm enables high-throughput compute that can bypass VM-level gas assumptions unless it
+  is separately metered.
+
+### I/O and side effects
+
+Disabled:
+
+- `console.*`
+- `print`
+
+Why:
+
+- **Side effects outside the transcript:** writing to stdout/stderr or host consoles is observable and
+  host-dependent. Deterministic mode requires that all observable effects go through manifest-defined
+  host calls (e.g. `Host.v1.emit`) where responses/limits are pinned by the ABI manifest.
+
+### JSON.parse / JSON.stringify
+
+Disabled:
+
+- `JSON.parse`
+- `JSON.stringify`
+
+Why:
+
+- **Non-canonical interchange:** JSON cannot represent many DV/JS values (e.g. `BigInt`, `NaN`,
+  `Infinity`, and it does not preserve `-0` reliably), which makes it a poor “canonical” format for
+  deterministic interchange.
+- **Cross-platform float conversions:** number parsing/printing is a common source of subtle
+  cross-toolchain differences if any part of the implementation delegates to platform conversion
+  routines. Deterministic mode prefers DV canonical encoding for interchange.
+
+### Engine-version-dependent behavior and performance cliffs
+
+Disabled:
+
+- `RegExp` (and regex literals)
+- `Proxy`
+- `Array.prototype.sort`
+
+Why:
+
+- **RegExp:** regex engines can have super-linear behavior (catastrophic backtracking) and large
+  internal state; execution cost is difficult to meter deterministically and can vary with engine
+  implementation details.
+- **Proxy:** proxies can introduce hidden re-entrancy (traps firing during seemingly “simple”
+  operations) and make it harder to reason about which operations are pure vs. user-code-driven,
+  complicating deterministic gas accounting and auditing.
+- **sort:** sorting is only fully deterministic when the comparator defines a total order. With
+  inconsistent comparators (common in the wild), the resulting permutation can vary across engines or
+  algorithm choices (stable/unstable, pivot strategy). Disabling `sort` prevents accidental reliance
+  on those engine-dependent outcomes.
+
+### Why some things throw instead of being absent
+
+In deterministic mode we use two patterns:
+
+- **Absent globals** (e.g. `Date`) keep the surface minimal and make feature-detection reliable.
+- **Deterministic stubs** (throwing a fixed `TypeError`) are used when:
+  - the intrinsic is normally present once a base set is loaded, or
+  - we want failures to be loud and message-stable for harness assertions, rather than silently
+    falling back to host-dependent behavior.
+
 ## Absent globals
 
 The deterministic init does not install these globals; `typeof` returns `"undefined"`:
