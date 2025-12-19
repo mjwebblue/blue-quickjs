@@ -7,7 +7,6 @@ export interface SmokeProgramArtifact {
   abiVersion: number;
   abiManifestHash: string;
   engineBuildHash?: string;
-  runtimeFlags?: Record<string, string | number | boolean>;
 }
 
 export interface SmokeInputEnvelope {

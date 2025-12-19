@@ -8,7 +8,6 @@ export interface DeterminismProgramArtifact {
   abiVersion: number;
   abiManifestHash: string;
   engineBuildHash?: string;
-  runtimeFlags?: Record<string, string | number | boolean>;
 }
 
 export interface DeterminismInputEnvelope {

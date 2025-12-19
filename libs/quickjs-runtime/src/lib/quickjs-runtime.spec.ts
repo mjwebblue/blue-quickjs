@@ -18,12 +18,6 @@ describe('validateProgramArtifact', () => {
     abiVersion: 1,
     abiManifestHash: SAMPLE_HASH,
     engineBuildHash: SAMPLE_HASH,
-    runtimeFlags: {
-      debug: true,
-      variant: 'wasm32',
-      maxMemoryMb: 32,
-      note: 'stable',
-    },
   };
 
   it('accepts a well-formed program artifact', () => {
@@ -49,15 +43,6 @@ describe('validateProgramArtifact', () => {
     ).toThrow(RuntimeValidationError);
   });
 
-  it('rejects runtime flags with unsupported types', () => {
-    expect(() =>
-      validateProgramArtifact({
-        ...baseProgram,
-        runtimeFlags: { invalid: { nested: true } },
-      }),
-    ).toThrow(RuntimeValidationError);
-  });
-
   it('rejects null or empty engineBuildHash values', () => {
     expect(() =>
       validateProgramArtifact({
@@ -70,15 +55,6 @@ describe('validateProgramArtifact', () => {
       validateProgramArtifact({
         ...baseProgram,
         engineBuildHash: '',
-      }),
-    ).toThrow(RuntimeValidationError);
-  });
-
-  it('rejects null runtimeFlags', () => {
-    expect(() =>
-      validateProgramArtifact({
-        ...baseProgram,
-        runtimeFlags: null as unknown as Record<string, never>,
       }),
     ).toThrow(RuntimeValidationError);
   });

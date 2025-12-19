@@ -1458,7 +1458,7 @@ Make `(P, I, G)` explicit and version-pin critical ABI/engine fields.
   - [x] code (source string for now),
   - [x] `abi_id`, `abi_version`,
   - [x] `abi_manifest_hash`,
-  - [x] optional `engine_build_hash` / runtime flags.
+  - [x] optional `engine_build_hash`.
 
 - [x] Define `I` structure in TS including:
   - [x] `event` DV, `eventCanonical` DV, `steps` DV,

@@ -9,33 +9,22 @@ import {
 const UINT32_MAX = 0xffffffff;
 const SHA256_HEX_LENGTH = 64;
 const HEX_RE = /^[0-9a-f]+$/;
-const FORBIDDEN_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
-
-export type RuntimeFlagValue = string | number | boolean;
-
 export interface ProgramArtifact {
   code: string;
   abiId: string;
   abiVersion: number;
   abiManifestHash: string;
   engineBuildHash?: string;
-  runtimeFlags?: Record<string, RuntimeFlagValue>;
 }
 
 export interface ProgramArtifactLimits {
   maxCodeUnits: number;
   maxAbiIdLength: number;
-  maxRuntimeFlags: number;
-  maxRuntimeFlagKeyLength: number;
-  maxRuntimeFlagStringLength: number;
 }
 
 export const PROGRAM_LIMIT_DEFAULTS: Readonly<ProgramArtifactLimits> = {
   maxCodeUnits: 1_048_576, // 1 MiB in UTF-16 code units
   maxAbiIdLength: 128,
-  maxRuntimeFlags: 32,
-  maxRuntimeFlagKeyLength: 64,
-  maxRuntimeFlagStringLength: 256,
 };
 
 export interface ProgramValidationOptions {
@@ -60,8 +49,6 @@ export type RuntimeValidationErrorCode =
   | 'EXCEEDS_LIMIT'
   | 'INVALID_HEX'
   | 'OUT_OF_RANGE'
-  | 'FORBIDDEN_KEY'
-  | 'TOO_MANY_ITEMS'
   | 'DV_INVALID';
 
 export class RuntimeValidationError extends Error {
@@ -84,14 +71,7 @@ export function validateProgramArtifact(
   const program = expectPlainObject(value, 'program');
   enforceExactKeys(
     program,
-    [
-      'code',
-      'abiId',
-      'abiVersion',
-      'abiManifestHash',
-      'engineBuildHash',
-      'runtimeFlags',
-    ],
+    ['code', 'abiId', 'abiVersion', 'abiManifestHash', 'engineBuildHash'],
     'program',
   );
 
@@ -120,22 +100,12 @@ export function validateProgramArtifact(
         })
       : undefined;
 
-  const runtimeFlags =
-    program.runtimeFlags !== undefined
-      ? validateRuntimeFlags(
-          program.runtimeFlags,
-          limits,
-          'program.runtimeFlags',
-        )
-      : undefined;
-
   return {
     code,
     abiId,
     abiVersion,
     abiManifestHash,
     engineBuildHash,
-    runtimeFlags,
   };
 }
 
@@ -160,55 +130,6 @@ export function validateInputEnvelope(
     eventCanonical,
     steps,
   };
-}
-
-function validateRuntimeFlags(
-  value: unknown,
-  limits: ProgramArtifactLimits,
-  path: string,
-): Record<string, RuntimeFlagValue> {
-  const flags = expectPlainObject(value, path);
-  const keys = Object.keys(flags);
-  if (keys.length > limits.maxRuntimeFlags) {
-    throw runtimeError(
-      'TOO_MANY_ITEMS',
-      `${path} has ${keys.length} entries; maxRuntimeFlags=${limits.maxRuntimeFlags}`,
-      path,
-    );
-  }
-
-  const result: Record<string, RuntimeFlagValue> = {};
-  for (const key of keys) {
-    if (FORBIDDEN_KEYS.has(key)) {
-      throw runtimeError(
-        'FORBIDDEN_KEY',
-        `${path} may not use reserved key "${key}"`,
-        `${path}.${key}`,
-      );
-    }
-    const normalizedKey = expectString(key, `${path} key`, {
-      maxLength: limits.maxRuntimeFlagKeyLength,
-    });
-    const flagValue = flags[key];
-    if (typeof flagValue === 'string') {
-      result[normalizedKey] = expectString(flagValue, `${path}.${key}`, {
-        maxLength: limits.maxRuntimeFlagStringLength,
-        allowEmpty: true,
-      });
-    } else if (typeof flagValue === 'boolean') {
-      result[normalizedKey] = flagValue;
-    } else if (typeof flagValue === 'number') {
-      result[normalizedKey] = expectFiniteNumber(flagValue, `${path}.${key}`);
-    } else {
-      throw runtimeError(
-        'INVALID_TYPE',
-        `${path}.${key} must be a string, number, or boolean`,
-        `${path}.${key}`,
-      );
-    }
-  }
-
-  return result;
 }
 
 function validateDvField(value: unknown, limits: DvLimits, path: string): DV {
@@ -335,23 +256,6 @@ function expectUint(
   return value;
 }
 
-function expectFiniteNumber(value: unknown, path: string): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    throw runtimeError('INVALID_TYPE', `${path} must be a finite number`, path);
-  }
-  if (Object.is(value, -0)) {
-    throw runtimeError('OUT_OF_RANGE', `${path} must not be -0`, path);
-  }
-  if (Math.abs(value) > Number.MAX_SAFE_INTEGER) {
-    throw runtimeError(
-      'OUT_OF_RANGE',
-      `${path} exceeds safe integer range`,
-      path,
-    );
-  }
-  return value;
-}
-
 function normalizeProgramLimits(
   overrides?: Partial<ProgramArtifactLimits>,
 ): ProgramArtifactLimits {
@@ -360,14 +264,6 @@ function normalizeProgramLimits(
       overrides?.maxCodeUnits ?? PROGRAM_LIMIT_DEFAULTS.maxCodeUnits,
     maxAbiIdLength:
       overrides?.maxAbiIdLength ?? PROGRAM_LIMIT_DEFAULTS.maxAbiIdLength,
-    maxRuntimeFlags:
-      overrides?.maxRuntimeFlags ?? PROGRAM_LIMIT_DEFAULTS.maxRuntimeFlags,
-    maxRuntimeFlagKeyLength:
-      overrides?.maxRuntimeFlagKeyLength ??
-      PROGRAM_LIMIT_DEFAULTS.maxRuntimeFlagKeyLength,
-    maxRuntimeFlagStringLength:
-      overrides?.maxRuntimeFlagStringLength ??
-      PROGRAM_LIMIT_DEFAULTS.maxRuntimeFlagStringLength,
   };
 }
 

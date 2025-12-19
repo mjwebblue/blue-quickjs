@@ -99,21 +99,17 @@ Some environments also provide `engineBuildHash` pinning; if present, the SDK ch
 Optional fields:
 
 - `engineBuildHash` (lowercase hex; sha256 of the wasm bytes)
-- `runtimeFlags` (plain object with string/number/boolean values; reserved keys like `__proto__` are rejected)
 
 Program artifact limits (validation defaults used by `evaluate()` and `initializeDeterministicVm()`):
 
 - `maxCodeUnits`: 1,048,576 UTF-16 code units (string length of `code`); caps the source size before any VM work begins.
 - `maxAbiIdLength`: 128; bounds the ABI identifier string length.
-- `maxRuntimeFlags`: 32 entries; limits how many keys `runtimeFlags` may contain.
-- `maxRuntimeFlagKeyLength`: 64; caps the length of each `runtimeFlags` key.
-- `maxRuntimeFlagStringLength`: 256; caps the length of string values in `runtimeFlags` (numbers/booleans are allowed as-is).
 
 Why these limits exist:
 
 - **Deterministic failure**: reject oversized or malformed artifacts before VM init, so errors are consistent across runtimes.
 - **Resource safety**: bound untrusted inputs to avoid large allocations or expensive parsing before gas metering applies.
-- **Defensive surface**: keep metadata (ABI ids, flags) within sane bounds and avoid abuse like huge flag maps.
+- **Defensive surface**: keep metadata (ABI ids, hashes) within sane bounds and avoid abuse like huge inputs.
 
 The hash pinning rules are described in:
 - [ABI manifest](./abi-manifest.md) (canonical encoding + hash)
