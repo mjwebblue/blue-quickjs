@@ -25,7 +25,7 @@ export interface GasFixture {
   input: DeterminismInputEnvelope;
   gasLimit: bigint;
   manifest: AbiManifest;
-  createHost: (input: DeterminismInputEnvelope) => DeterminismHostEnvironment;
+  createHost: () => DeterminismHostEnvironment;
   expected: GasFixtureBaseline;
   repeatSameContext?: GasFixtureRepeatBaseline;
 }

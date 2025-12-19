@@ -42,48 +42,13 @@ export interface ProgramValidationOptions {
   limits?: Partial<ProgramArtifactLimits>;
 }
 
-export interface DocumentSnapshotIdentity {
-  /**
-   * Stable document identifier (e.g., workflow document id or path).
-   */
-  id?: string;
-  /**
-   * Hash of the snapshot contents for auditability (expected lowercase hex).
-   */
-  hash?: string;
-  /**
-   * Optional epoch/version counter for the snapshot. Must be a non-negative integer.
-   */
-  epoch?: number;
-}
-
 export interface InputEnvelope {
   event: DV;
   eventCanonical: DV;
   steps: DV;
-  document: DocumentSnapshotIdentity;
-  /**
-   * Embedder-provided deterministic context available to host-call handlers.
-   */
-  hostContext?: DV;
 }
-
-export interface InputEnvelopeLimits {
-  dv: DvLimits;
-  maxDocumentIdLength: number;
-  maxDocumentHashLength: number;
-  maxDocumentEpoch: number;
-}
-
-export const INPUT_LIMIT_DEFAULTS: Readonly<InputEnvelopeLimits> = {
-  dv: DV_LIMIT_DEFAULTS,
-  maxDocumentIdLength: 256,
-  maxDocumentHashLength: 128,
-  maxDocumentEpoch: Number.MAX_SAFE_INTEGER,
-};
 
 export interface InputValidationOptions {
-  limits?: Partial<Omit<InputEnvelopeLimits, 'dv'>>;
   dvLimits?: Partial<DvLimits>;
 }
 
@@ -97,7 +62,6 @@ export type RuntimeValidationErrorCode =
   | 'OUT_OF_RANGE'
   | 'FORBIDDEN_KEY'
   | 'TOO_MANY_ITEMS'
-  | 'MISSING_IDENTITY'
   | 'DV_INVALID';
 
 export class RuntimeValidationError extends Error {
@@ -179,74 +143,23 @@ export function validateInputEnvelope(
   value: unknown,
   options?: InputValidationOptions,
 ): InputEnvelope {
-  const limits = normalizeInputLimits(options);
+  const dvLimits = normalizeDvLimits(options?.dvLimits);
   const input = expectPlainObject(value, 'input');
-  enforceExactKeys(
-    input,
-    ['event', 'eventCanonical', 'steps', 'document', 'hostContext'],
-    'input',
-  );
+  enforceExactKeys(input, ['event', 'eventCanonical', 'steps'], 'input');
 
-  const event = validateDvField(input.event, limits, 'input.event');
+  const event = validateDvField(input.event, dvLimits, 'input.event');
   const eventCanonical = validateDvField(
     input.eventCanonical,
-    limits,
+    dvLimits,
     'input.eventCanonical',
   );
-  const steps = validateDvField(input.steps, limits, 'input.steps');
-  const document = validateDocumentSnapshot(
-    input.document,
-    limits,
-    'input.document',
-  );
-  const hostContext =
-    input.hostContext !== undefined
-      ? validateDvField(input.hostContext, limits, 'input.hostContext')
-      : undefined;
+  const steps = validateDvField(input.steps, dvLimits, 'input.steps');
 
   return {
     event,
     eventCanonical,
     steps,
-    document,
-    hostContext,
   };
-}
-
-function validateDocumentSnapshot(
-  value: unknown,
-  limits: InputEnvelopeLimits,
-  path: string,
-): DocumentSnapshotIdentity {
-  const snapshot = expectPlainObject(value, path);
-  enforceExactKeys(snapshot, ['id', 'hash', 'epoch'], path);
-
-  const id =
-    snapshot.id !== undefined
-      ? expectString(snapshot.id, `${path}.id`, {
-          maxLength: limits.maxDocumentIdLength,
-        })
-      : undefined;
-  const hash =
-    snapshot.hash !== undefined
-      ? expectHexString(snapshot.hash, `${path}.hash`, {
-          maxLength: limits.maxDocumentHashLength,
-        })
-      : undefined;
-  const epoch =
-    snapshot.epoch !== undefined
-      ? expectUint(snapshot.epoch, 0, limits.maxDocumentEpoch, `${path}.epoch`)
-      : undefined;
-
-  if (id === undefined && hash === undefined && epoch === undefined) {
-    throw runtimeError(
-      'MISSING_IDENTITY',
-      `${path} must include at least one of id, hash, or epoch`,
-      path,
-    );
-  }
-
-  return { id, hash, epoch };
 }
 
 function validateRuntimeFlags(
@@ -298,13 +211,9 @@ function validateRuntimeFlags(
   return result;
 }
 
-function validateDvField(
-  value: unknown,
-  limits: InputEnvelopeLimits,
-  path: string,
-): DV {
+function validateDvField(value: unknown, limits: DvLimits, path: string): DV {
   try {
-    validateDv(value, { limits: limits.dv });
+    validateDv(value, { limits });
     return value as DV;
   } catch (err) {
     if (err instanceof DvError) {
@@ -459,23 +368,6 @@ function normalizeProgramLimits(
     maxRuntimeFlagStringLength:
       overrides?.maxRuntimeFlagStringLength ??
       PROGRAM_LIMIT_DEFAULTS.maxRuntimeFlagStringLength,
-  };
-}
-
-function normalizeInputLimits(
-  options?: InputValidationOptions,
-): InputEnvelopeLimits {
-  return {
-    dv: normalizeDvLimits(options?.dvLimits),
-    maxDocumentIdLength:
-      options?.limits?.maxDocumentIdLength ??
-      INPUT_LIMIT_DEFAULTS.maxDocumentIdLength,
-    maxDocumentHashLength:
-      options?.limits?.maxDocumentHashLength ??
-      INPUT_LIMIT_DEFAULTS.maxDocumentHashLength,
-    maxDocumentEpoch:
-      options?.limits?.maxDocumentEpoch ??
-      INPUT_LIMIT_DEFAULTS.maxDocumentEpoch,
   };
 }
 

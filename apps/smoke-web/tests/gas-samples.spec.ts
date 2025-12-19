@@ -80,7 +80,7 @@ async function runNodeFixtures(): Promise<FixtureResult[]> {
 
   const results: FixtureResult[] = [];
   for (const fixture of GAS_SAMPLE_FIXTURES) {
-    const host = fixture.createHost(fixture.input);
+    const host = fixture.createHost();
     const result = await evaluate({
       program: fixture.program,
       input: fixture.input,
@@ -156,7 +156,7 @@ async function runRepeatSameContext(
     return { samples: [], expectedGasUsed: '0', match: true };
   }
 
-  const host = fixture.createHost(fixture.input);
+  const host = fixture.createHost();
   const runtime = await createRuntime({
     manifest: fixture.manifest,
     handlers: host.handlers,

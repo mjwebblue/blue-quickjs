@@ -31,7 +31,7 @@ For any fixed triple \((P, I, G)\), evaluation must be **bit-for-bit reproducibl
 Definitions:
 
 - **P (Program artifact)**: JS source plus pins for ABI/engine (see `libs/quickjs-runtime` types and Baseline #2 for ABI pins).
-- **I (Input envelope)**: deterministic external inputs (event/steps/document snapshot identity) injected via deterministic init.
+- **I (Input envelope)**: deterministic external inputs (event/eventCanonical/steps) injected via deterministic init.
 - **G**: gas budget (uint64) applied inside the VM.
 
 ## 2. “Same engine everywhere” (normative)

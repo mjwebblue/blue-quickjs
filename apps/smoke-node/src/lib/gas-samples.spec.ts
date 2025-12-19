@@ -14,7 +14,7 @@ import {
 describe('smoke-node gas samples', () => {
   it('captures baseline usage for representative scripts', async () => {
     for (const fixture of GAS_SAMPLE_FIXTURES) {
-      const host = fixture.createHost(fixture.input);
+      const host = fixture.createHost();
       const result = await evaluate({
         program: fixture.program,
         input: fixture.input,
@@ -49,7 +49,7 @@ describe('smoke-node gas samples', () => {
       throw new Error('missing repeat gas fixture');
     }
 
-    const host = repeatFixture.createHost(repeatFixture.input);
+    const host = repeatFixture.createHost();
     const runtime = await createRuntime({
       manifest: repeatFixture.manifest,
       handlers: host.handlers,

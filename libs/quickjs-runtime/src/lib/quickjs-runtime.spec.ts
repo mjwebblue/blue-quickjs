@@ -89,25 +89,10 @@ describe('validateInputEnvelope', () => {
     event: { type: 'create', payload: { id: 1 } },
     eventCanonical: { type: 'create', payload: { id: 1 } },
     steps: [],
-    document: {
-      id: 'doc-1',
-      hash: SAMPLE_HASH,
-      epoch: 5,
-    },
-    hostContext: { requestId: 'abc' },
   };
 
   it('accepts a well-formed input envelope', () => {
     expect(validateInputEnvelope(baseInput)).toEqual(baseInput);
-  });
-
-  it('rejects envelopes without any document identity fields', () => {
-    expect(() =>
-      validateInputEnvelope({
-        ...baseInput,
-        document: {},
-      }),
-    ).toThrow(RuntimeValidationError);
   });
 
   it('rejects invalid DV fields with a wrapped error', () => {
@@ -132,11 +117,11 @@ describe('validateInputEnvelope', () => {
     ).toThrow(RuntimeValidationError);
   });
 
-  it('rejects document hashes that are not hex', () => {
+  it('rejects unknown fields', () => {
     expect(() =>
       validateInputEnvelope({
         ...baseInput,
-        document: { id: 'doc-1', hash: 'not-hex' },
+        extra: 123 as unknown as InputEnvelope['steps'],
       }),
     ).toThrow(RuntimeValidationError);
   });

@@ -44,7 +44,7 @@ export async function runSmokeNode(
   let host: SmokeHostEnvironment | null = null;
 
   try {
-    host = createSmokeHost(SMOKE_INPUT);
+    host = createSmokeHost();
     const result = await evaluate({
       program: SMOKE_PROGRAM,
       input: SMOKE_INPUT,

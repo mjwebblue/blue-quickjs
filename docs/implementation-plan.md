@@ -69,7 +69,7 @@ This repo exports a deterministic evaluator. The external embedder (`document-pr
 
 - workflow orchestration (step sequencing),
 - document overlay/commit/rollback logic,
-- providing the document snapshot context and **deterministic host-call implementation** for:
+- providing the **deterministic host-call implementation** for:
   - `Host.v1.document.get(path)`
   - `Host.v1.document.getCanonical(path)`
 
@@ -1351,7 +1351,7 @@ Freeze memory growth and remove nondeterministic runtime features.
 
 - `scripts/build-wasm.sh` now builds with `-sDETERMINISTIC=1`, `-sFILESYSTEM=0`, `-sALLOW_MEMORY_GROWTH=0`, `-sALLOW_TABLE_GROWTH=0`, fixed memory (`INITIAL_MEMORY=MAXIMUM_MEMORY=32 MiB`) and a 1 MiB stack; SOURCE_DATE_EPOCH is pinned (override via env) to strip timestamps.
 - Memory/flag settings are exported into `quickjs-wasm-build.metadata.json` under `build.memory` and `build.determinism` for audit, and `docs/toolchain.md` documents the deterministic flags/memory choices.
-- `pnpm nx build quickjs-wasm-build` and `pnpm nx test quickjs-wasm-build` pass with the deterministic settings; wasm/hash metadata reflects stable builds given identical inputs/epoch.
+- `pnpm nx build quickjs-wasm-build` and `pnpm nx test quickjs-wasm-build` pass with the deterministic settings; wasm/hash metadata reflects stable builds given identical inputs.
 
 ---
 
@@ -1462,8 +1462,7 @@ Make `(P, I, G)` explicit and version-pin critical ABI/engine fields.
 
 - [x] Define `I` structure in TS including:
   - [x] `event` DV, `eventCanonical` DV, `steps` DV,
-  - [x] a document snapshot identity (epoch/hash/id) for auditability,
-  - [x] any additional deterministic inputs required by host calls.
+  - [x] enforce rejection of unknown fields (no document snapshot/host metadata carried in the envelope).
 
 - [x] Add validation helpers.
 
@@ -1915,7 +1914,7 @@ Deterministic ABI entrypoints are available; wasm gas consumers have been migrat
 
 **Current state (P8 T-090):**
 
-- `libs/quickjs-wasm-build` exports only deterministic ABI entrypoints; qjs_eval/qjs_free_output were removed from the C harness and build script, and the README now documents qjs_det_* usage and `_free` expectations.
+- `libs/quickjs-wasm-build` exports only deterministic ABI entrypoints; qjs*eval/qjs_free_output were removed from the C harness and build script, and the README now documents qjs_det*\* usage and `_free` expectations.
 - Wasm-facing specs in `libs/test-harness`, `libs/quickjs-wasm`, and `libs/quickjs-runtime` drive `qjs_det_init`/`qjs_det_eval` with the Host.v1 manifest/context and assert DV payloads + gas numbers (wasm32 expectations are pinned; wasm64 compares to native).
 - Legacy notes from `docs/wasm-gas-harness.md` were folded into `docs/toolchain.md` and this plan; the legacy doc was deleted.
 
