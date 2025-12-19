@@ -1,9 +1,14 @@
 import { decodeDv, encodeDv } from '@blue-quickjs/dv';
-import { HOST_V1_MANIFEST } from '@blue-quickjs/test-harness';
+import {
+  DETERMINISM_INPUT,
+  HOST_V1_HASH,
+  HOST_V1_MANIFEST,
+  hexToBytes,
+  parseDeterministicOutput,
+} from '@blue-quickjs/test-harness';
 import { type HostDispatcherHandlers } from './host-dispatcher.js';
+import { initializeDeterministicVm } from './deterministic-init.js';
 import { createRuntime } from './runtime.js';
-
-const DOC_GET_ID = getFnId('document.get');
 
 describe('createRuntime', () => {
   it('instantiates the wasm module and evaluates code', async () => {
@@ -12,18 +17,19 @@ describe('createRuntime', () => {
       handlers: createHandlers(),
     });
 
-    const evalFn = runtime.module.cwrap('qjs_eval', 'number', [
-      'string',
-      'bigint',
-    ]);
-    const freeFn = runtime.module.cwrap('qjs_free_output', null, ['number']);
-
-    const ptr = evalFn('1 + 2', BigInt(500));
-    const ptrNumber = normalizePtr(ptr);
-    const output = runtime.module.UTF8ToString(ptrNumber);
-    freeFn(ptrNumber);
-
-    expect(output.trim()).toContain('RESULT 3');
+    const vm = initializeDeterministicVm(
+      runtime,
+      PROGRAM,
+      DETERMINISM_INPUT,
+      500n,
+    );
+    const output = vm.eval(PROGRAM.code);
+    const parsed = parseDeterministicOutput(output);
+    expect(parsed.kind).toBe('RESULT');
+    expect(parsed.gasUsed > 0n).toBe(true);
+    expect(parsed.gasRemaining >= 0n).toBe(true);
+    expect(decodeDv(hexToBytes(parsed.payload))).toBe(3);
+    vm.dispose();
   });
 
   it('wires host_call to the manifest-backed dispatcher', async () => {
@@ -68,6 +74,14 @@ describe('createRuntime', () => {
   });
 });
 
+const DOC_GET_ID = getFnId('document.get');
+const PROGRAM = {
+  code: '(() => 1 + 2)()',
+  abiId: 'Host.v1',
+  abiVersion: 1,
+  abiManifestHash: HOST_V1_HASH,
+};
+
 function createHandlers(
   overrides?: Partial<HostDispatcherHandlers>,
 ): HostDispatcherHandlers {
@@ -93,19 +107,6 @@ function createHandlers(
         units: 1,
       })),
   };
-}
-
-function normalizePtr(value: unknown): number {
-  if (typeof value === 'number') {
-    return value;
-  }
-  if (typeof value === 'bigint') {
-    if (value > BigInt(Number.MAX_SAFE_INTEGER)) {
-      throw new Error('Pointer exceeds JS safe integer range');
-    }
-    return Number(value);
-  }
-  throw new Error(`Unexpected pointer type: ${typeof value}`);
 }
 
 function getFnId(path: string): number {

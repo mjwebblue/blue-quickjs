@@ -23,7 +23,6 @@ type DetInitFn = (
 
 type DetEvalFn = (code: string) => number;
 type DetSetGasLimitFn = (gasLimit: bigint) => number;
-type FreeOutputFn = (ptr: number) => void;
 type EnableTapeFn = (capacity: number) => number;
 type ReadTapeFn = () => number;
 type EnableTraceFn = (enabled: number) => number;
@@ -34,7 +33,6 @@ interface DeterministicExports {
   eval: DetEvalFn;
   setGasLimit: DetSetGasLimitFn;
   freeRuntime: () => void;
-  freeOutput: FreeOutputFn;
   enableTape: EnableTapeFn;
   readTape: ReadTapeFn;
   enableTrace: EnableTraceFn;
@@ -87,11 +85,7 @@ export function initializeDeterministicVm(
       normalizedGasLimit,
     );
     if (errorPtr !== 0) {
-      const message = readAndFreeCString(
-        runtime.module,
-        errorPtr,
-        ffi.freeOutput,
-      );
+      const message = readAndFreeCString(runtime.module, errorPtr);
       ffi.freeRuntime();
       throw new Error(`VM init failed: ${message}`);
     }
@@ -109,7 +103,7 @@ export function initializeDeterministicVm(
       if (ptr === 0) {
         throw new Error('qjs_det_eval returned a null pointer');
       }
-      return readAndFreeCString(runtime.module, ptr, ffi.freeOutput);
+      return readAndFreeCString(runtime.module, ptr);
     },
     setGasLimit(limit: bigint | number): void {
       const normalized = normalizeGasLimit(limit);
@@ -134,7 +128,7 @@ export function initializeDeterministicVm(
       if (ptr === 0) {
         throw new Error('qjs_det_read_tape returned a null pointer');
       }
-      return readAndFreeCString(runtime.module, ptr, ffi.freeOutput);
+      return readAndFreeCString(runtime.module, ptr);
     },
     enableGasTrace(enabled: boolean): void {
       const rc = ffi.enableTrace(enabled ? 1 : 0);
@@ -147,7 +141,7 @@ export function initializeDeterministicVm(
       if (ptr === 0) {
         throw new Error('qjs_det_read_trace returned a null pointer');
       }
-      return readAndFreeCString(runtime.module, ptr, ffi.freeOutput);
+      return readAndFreeCString(runtime.module, ptr);
     },
     dispose() {
       ffi.freeRuntime();
@@ -179,9 +173,6 @@ function createDeterministicExports(
     null,
     [],
   ) as unknown as () => void;
-  const freeOutput = module.cwrap('qjs_free_output', null, [
-    'number',
-  ]) as unknown as FreeOutputFn;
   const enableTape = module.cwrap('qjs_det_enable_tape', 'number', [
     'number',
   ]) as unknown as EnableTapeFn;
@@ -204,7 +195,6 @@ function createDeterministicExports(
     eval: evalFn,
     setGasLimit,
     freeRuntime,
-    freeOutput,
     enableTape,
     readTape,
     enableTrace,
@@ -259,14 +249,10 @@ function writeCString(module: QuickjsWasmModule, value: string): number {
   return ptr;
 }
 
-function readAndFreeCString(
-  module: QuickjsWasmModule,
-  ptr: number,
-  freeOutput: FreeOutputFn,
-): string {
+function readAndFreeCString(module: QuickjsWasmModule, ptr: number): string {
   try {
     return module.UTF8ToString(ptr);
   } finally {
-    freeOutput(ptr);
+    module._free(ptr);
   }
 }

@@ -13,6 +13,12 @@
   "references": [
     {
       "path": "../quickjs-wasm-build/tsconfig.lib.json"
+    },
+    {
+      "path": "../test-harness/tsconfig.lib.json"
+    },
+    {
+      "path": "../dv/tsconfig.lib.json"
     }
   ],
   "exclude": [

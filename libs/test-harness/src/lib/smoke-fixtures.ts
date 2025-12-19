@@ -7,19 +7,12 @@ export interface SmokeProgramArtifact {
   abiVersion: number;
   abiManifestHash: string;
   engineBuildHash?: string;
-  runtimeFlags?: Record<string, string | number | boolean>;
 }
 
 export interface SmokeInputEnvelope {
   event: DV;
   eventCanonical: DV;
   steps: DV;
-  document: {
-    id?: string;
-    hash?: string;
-    epoch?: number;
-  };
-  hostContext?: DV;
 }
 
 export const SMOKE_PROGRAM: SmokeProgramArtifact = {
@@ -49,12 +42,6 @@ export const SMOKE_INPUT: SmokeInputEnvelope = {
     { name: 'ingest', status: 'done' },
     { name: 'analyze', status: 'pending' },
   ],
-  document: {
-    id: 'doc-demo',
-    hash: HOST_V1_HASH,
-    epoch: 7,
-  },
-  hostContext: { requestId: 'smoke-node', locale: 'en-US' },
 };
 
 export const SMOKE_GAS_LIMIT = 50_000n;
@@ -74,30 +61,15 @@ export interface SmokeHostEnvironment {
   emitted: DV[];
 }
 
-export function createSmokeHost(
-  input: SmokeInputEnvelope,
-): SmokeHostEnvironment {
+export function createSmokeHost(): SmokeHostEnvironment {
   const emitted: DV[] = [];
-  const context = input.hostContext ?? {};
-  const requestId =
-    typeof context === 'object' &&
-    context &&
-    'requestId' in context &&
-    typeof (context as Record<string, unknown>).requestId === 'string'
-      ? String((context as Record<string, unknown>).requestId)
-      : null;
-  const snapshot: DV = {
-    requestId,
-    epoch: input.document.epoch ?? null,
-  };
-  const documentHash = input.document.hash ?? HOST_V1_HASH;
+  const documentHash = HOST_V1_HASH;
 
   const handlers: SmokeHostHandlers = {
     document: {
       get: (path: string) => ({
         ok: {
           path,
-          snapshot,
         },
         units: 9,
       }),
@@ -105,7 +77,6 @@ export function createSmokeHost(
         ok: {
           canonical: path,
           hash: documentHash,
-          snapshot,
         },
         units: 7,
       }),
@@ -132,12 +103,12 @@ export interface SmokeBaseline {
 export const SMOKE_BASELINE: SmokeBaseline = {
   manifestHash: HOST_V1_HASH,
   resultHash:
-    '75f844894a9c3cf3da958906adbce5943dd87cfa669992e125970f6d080f201d',
-  gasUsed: 1976n,
-  gasRemaining: 48024n,
+    '4a13893d4d564c7c9e7dcb0b6bbc028b824268585a0cbbdb19ac28a34138f293',
+  gasUsed: 1638n,
+  gasRemaining: 48362n,
   emittedCount: 1,
   tapeLength: 3,
-  tapeHash: 'cb2d35a1616faeeeef73a608c2eaab03d040c4244ecc17a66d2a6fc3c17fa174',
+  tapeHash: '2ca437d26207d59b369ae74a448d497a79ae482071d61ff8b05fa78a7d5b570f',
 };
 
 export interface SmokeTapeRecord {

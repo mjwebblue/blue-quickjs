@@ -36,3 +36,9 @@ Notes:
 - Host surface only: the Emscripten filesystem is stripped (`-sFILESYSTEM=0`), and the environment is limited to `node,web` with `-sNO_EXIT_RUNTIME=1`; no FS/network syscalls are available to the wasm module.
 - Built artifacts record these settings in `dist/quickjs-wasm-build.metadata.json` under `build.memory` and `build.determinism` for auditability.
 - By default the build emits both release and debug wasm32 artifacts; set `WASM_BUILD_TYPES=release` to skip debug. Debug builds add Emscripten assertions/stack-overflow checks while keeping the same deterministic VM semantics.
+
+## QuickJS wasm build outputs
+
+- Artifacts land in `libs/quickjs-wasm-build/dist/` as `quickjs-eval{,-debug}{,-wasm64}.{js,wasm}` (wasm32 is canonical; wasm64 is optional for debugging). Loader + metadata are resolved via `getQuickjsWasmArtifacts(...)` and `readQuickjsWasmMetadata()`.
+- `quickjs-wasm-build.metadata.json` captures per-variant/per-build-type filenames, hashes, sizes, flags, and `engineBuildHash` (keyed to wasm32 release when present).
+- The wasm harness exports deterministic ABI entrypoints only (`qjs_det_init`/`qjs_det_eval`/`qjs_det_set_gas_limit`/`qjs_det_free` plus tape/trace helpers) and returns DV-hex payloads with `RESULT … GAS …` / `ERROR … GAS …` formatting; strings are freed with the exported `_free` helper.

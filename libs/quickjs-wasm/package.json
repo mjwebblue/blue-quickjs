@@ -32,5 +32,9 @@
   },
   "dependencies": {
     "@blue-quickjs/quickjs-wasm-build": "workspace:*"
+  },
+  "devDependencies": {
+    "@blue-quickjs/dv": "workspace:*",
+    "@blue-quickjs/test-harness": "workspace:*"
   }
 }

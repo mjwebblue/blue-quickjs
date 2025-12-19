@@ -17,12 +17,6 @@ const BASE_INPUT: InputEnvelope = {
   event: { type: 'create', payload: { id: 1 } },
   eventCanonical: { type: 'create', payload: { id: 1 } },
   steps: [{ name: 'first' }],
-  document: {
-    id: 'doc-1',
-    hash: HOST_V1_HASH,
-    epoch: 1,
-  },
-  hostContext: { requestId: 'req-1' },
 };
 
 describe('evaluate', () => {

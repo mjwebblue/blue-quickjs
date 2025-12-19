@@ -91,7 +91,7 @@ BASE_EMCC_FLAGS=(
   -sERROR_ON_UNDEFINED_SYMBOLS=0
   -sEXPORT_NAME=QuickJSGasWasm
   -sWASM_BIGINT=1
-  "-sEXPORTED_FUNCTIONS=['_qjs_eval','_qjs_det_init','_qjs_det_eval','_qjs_det_set_gas_limit','_qjs_det_free','_qjs_det_enable_tape','_qjs_det_read_tape','_qjs_det_enable_trace','_qjs_det_read_trace','_qjs_free_output','_malloc','_free']"
+  "-sEXPORTED_FUNCTIONS=['_qjs_det_init','_qjs_det_eval','_qjs_det_set_gas_limit','_qjs_det_free','_qjs_det_enable_tape','_qjs_det_read_tape','_qjs_det_enable_trace','_qjs_det_read_trace','_malloc','_free']"
 "-sEXPORTED_RUNTIME_METHODS=['cwrap','ccall','UTF8ToString','lengthBytesUTF8']"
 )
 

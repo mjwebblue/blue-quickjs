@@ -129,7 +129,7 @@ export class AppElement extends HTMLElement {
   }
 
   private async executeSmoke(artifacts: WasmArtifacts): Promise<SmokeDisplay> {
-    const host = createSmokeHost(SMOKE_INPUT);
+    const host = createSmokeHost();
     const result = await evaluate({
       program: SMOKE_PROGRAM,
       input: SMOKE_INPUT,

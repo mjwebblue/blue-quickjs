@@ -4,3 +4,5 @@ export * from './lib/eval-output.js';
 export * from './lib/gas-fixtures.js';
 export * from './lib/smoke-fixtures.js';
 export * from './lib/test-harness.js';
+export * from './lib/deterministic-output.js';
+export * from './lib/wasm-memory.js';

@@ -69,7 +69,7 @@ This repo exports a deterministic evaluator. The external embedder (`document-pr
 
 - workflow orchestration (step sequencing),
 - document overlay/commit/rollback logic,
-- providing the document snapshot context and **deterministic host-call implementation** for:
+- providing the **deterministic host-call implementation** for:
   - `Host.v1.document.get(path)`
   - `Host.v1.document.getCanonical(path)`
 
@@ -836,12 +836,12 @@ Produce a minimal Emscripten-built QuickJS-in-Wasm binary that exposes the canon
 **Current state (P2.5 T-029 Subtask A):**
 
 - `pnpm nx build quickjs-wasm-build` now calls an emscripten build script (pinned 3.1.56) that compiles the deterministic QuickJS fork + a wasm harness to `libs/quickjs-wasm-build/dist/quickjs-eval{,-debug}.{js,wasm}` (alongside the TS outputs in the same folder, with optional memory64 variants when enabled).
-- The harness exports `qjs_eval(code, gas_limit)` and `qjs_free_output(ptr)`; `qjs_eval` mirrors the native harness formatting (`RESULT … GAS …` / `ERROR … GAS …`) and runs deterministic GC checkpoints around evaluation.
+- The harness exports deterministic ABI entrypoints (`qjs_det_init`/`qjs_det_eval`/`qjs_det_free` plus gas/tape/trace helpers), returning DV-hex payloads with `RESULT … GAS …` / `ERROR … GAS …` formatting and consuming the imported `host_call` dispatcher.
 - The JS glue is an ES module (`QuickJSGasWasm` factory) with runtime methods exported for `cwrap`/`UTF8ToString`; artifact paths are surfaced via `getQuickjsWasmArtifacts(variant, buildType)` in `libs/quickjs-wasm-build`.
 
 **Current state (P2.5 T-029 Subtask B):**
 
-- The vitest spec at `libs/test-harness/src/lib/gas-equivalence.spec.ts` now covers the full gas fixture set (`zero-precharge`, `gc-checkpoint-budget`, `loop-oog`, `constant`, `addition`, `string-repeat`) against the wasm harness using the wasm32 artifact by default, asserting expected kind/message/gas remaining/used. Setting `QJS_WASM_VARIANT=wasm64` switches the test to the memory64 artifact and restores native-vs-wasm comparisons for debugging.
+- The vitest spec at `libs/test-harness/src/lib/gas-equivalence.spec.ts` covers the full gas fixture set (`zero-precharge`, `gc-checkpoint-budget`, `loop-oog`, `constant`, `addition`, `string-repeat`) against the wasm harness using the wasm32 artifact by default, driving `qjs_det_init`/`qjs_det_eval` with the Host.v1 manifest/context and asserting DV payloads + gas remaining/used. Setting `QJS_WASM_VARIANT=wasm64` switches the test to the memory64 artifact and restores native-vs-wasm comparisons for debugging.
 - The wasm build defaults to wasm32 with `-sWASM_BIGINT=1`; `libs/quickjs-wasm-build/scripts/build-wasm.sh` accepts `WASM_VARIANTS=wasm32,wasm64` to also emit `quickjs-eval-wasm64{,-debug}.{js,wasm}`, and `WASM_BUILD_TYPES=release,debug` to control whether debug builds are emitted. Harnesses use `getQuickjsWasmArtifacts(variant, buildType)` with `QJS_WASM_BUILD_TYPE` defaulting to `release`.
 - **Compatibility note:** wasm32 gas numbers diverge from native because of the 32-bit allocator layout, but Node and browser harnesses now agree on the wasm32 outputs. wasm32 is the chosen canonical variant; wasm64 is not planned/supported (memory64 remains non-portable in mainstream browsers), so native-parity debugging should proceed within wasm32 expectations.
 
@@ -852,7 +852,7 @@ Produce a minimal Emscripten-built QuickJS-in-Wasm binary that exposes the canon
 
 **Current state (P2.5 T-029 Subtask D):**
 
-- Added `docs/wasm-gas-harness.md` capturing the temporary limitations of the early wasm gas harness (no host ABI/manifest, JSON-stringify output, wasm32 vs native gas divergence, provisional emscripten flags/memory sizing) and explicitly marking what is stable for P2.5 (entrypoints/output format, artifact paths, pinned wasm32 gas fixtures) versus pre-P4 areas that may change during hardening.
+- Temporary wasm-gas notes from the pre-ABI harness were folded into the toolchain/build docs; the legacy JSON harness was removed in favor of the deterministic ABI entrypoints, with wasm32 gas fixtures now pinned via the DV-based path.
 
 ---
 
@@ -1351,7 +1351,7 @@ Freeze memory growth and remove nondeterministic runtime features.
 
 - `scripts/build-wasm.sh` now builds with `-sDETERMINISTIC=1`, `-sFILESYSTEM=0`, `-sALLOW_MEMORY_GROWTH=0`, `-sALLOW_TABLE_GROWTH=0`, fixed memory (`INITIAL_MEMORY=MAXIMUM_MEMORY=32 MiB`) and a 1 MiB stack; SOURCE_DATE_EPOCH is pinned (override via env) to strip timestamps.
 - Memory/flag settings are exported into `quickjs-wasm-build.metadata.json` under `build.memory` and `build.determinism` for audit, and `docs/toolchain.md` documents the deterministic flags/memory choices.
-- `pnpm nx build quickjs-wasm-build` and `pnpm nx test quickjs-wasm-build` pass with the deterministic settings; wasm/hash metadata reflects stable builds given identical inputs/epoch.
+- `pnpm nx build quickjs-wasm-build` and `pnpm nx test quickjs-wasm-build` pass with the deterministic settings; wasm/hash metadata reflects stable builds given identical inputs.
 
 ---
 
@@ -1458,12 +1458,11 @@ Make `(P, I, G)` explicit and version-pin critical ABI/engine fields.
   - [x] code (source string for now),
   - [x] `abi_id`, `abi_version`,
   - [x] `abi_manifest_hash`,
-  - [x] optional `engine_build_hash` / runtime flags.
+  - [x] optional `engine_build_hash`.
 
 - [x] Define `I` structure in TS including:
   - [x] `event` DV, `eventCanonical` DV, `steps` DV,
-  - [x] a document snapshot identity (epoch/hash/id) for auditability,
-  - [x] any additional deterministic inputs required by host calls.
+  - [x] enforce rejection of unknown fields (no document snapshot/host metadata carried in the envelope).
 
 - [x] Add validation helpers.
 
@@ -1892,26 +1891,32 @@ Define versioning/publishing so consumers can pin engine/ABI reliably.
 ### T-090: Retire legacy wasm JSON gas harness and consolidate docs
 
 **Phase:** P8 – Legacy wasm harness cleanup
-**Status:** TODO
+**Status:** DONE
 **Depends on:** T-053, T-063, T-064
 
 **Goal:**
 Remove the pre-ABI `qjs_eval`/`qjs_free_output` JSON harness, move wasm consumers/tests to the deterministic ABI path, and fold any still-relevant notes into canonical docs so `docs/wasm-gas-harness.md` can be deleted.
 
 **Current state:**
-Wasm build still exports `qjs_eval` for gas fixtures; tests in `libs/test-harness`, `libs/quickjs-wasm`, and `libs/quickjs-runtime` parse the legacy `RESULT|ERROR … GAS …` output. The temporary doc `docs/wasm-gas-harness.md` is the only place this legacy contract is described.
+Deterministic ABI entrypoints are available; wasm gas consumers have been migrated off the legacy JSON harness, and the temporary wasm-gas-harness doc has been removed in favor of canonical toolchain/build notes.
 
 **Detailed tasks:**
 
-- [ ] Update wasm-facing tests to use the deterministic ABI entrypoints: drive `qjs_det_init`/`qjs_det_eval` with the manifest + DV payloads in `libs/test-harness/src/lib/gas-equivalence.spec.ts`, `libs/quickjs-wasm/src/lib/quickjs-wasm.spec.ts`, and `libs/quickjs-runtime/src/lib/runtime.spec.ts`; rebaseline gas expectations from the ABI path.
-- [ ] Remove legacy exports from the wasm harness: drop `qjs_eval`/`qjs_free_output` from `libs/quickjs-wasm-build/src/wasm/quickjs_wasm.c` and from the exported symbols list in `libs/quickjs-wasm-build/scripts/build-wasm.sh`; update `libs/quickjs-wasm-build/README.md` to describe only the deterministic ABI entrypoints.
-- [ ] Consolidate documentation: migrate any persistent artifact path/metadata notes from `docs/wasm-gas-harness.md` into the appropriate canonical doc (`docs/toolchain.md` or this plan’s P4 state) and remove `docs/wasm-gas-harness.md` plus its reference in this file.
+- [x] Update wasm-facing tests to use the deterministic ABI entrypoints: drive `qjs_det_init`/`qjs_det_eval` with the manifest + DV payloads in `libs/test-harness/src/lib/gas-equivalence.spec.ts`, `libs/quickjs-wasm/src/lib/quickjs-wasm.spec.ts`, and `libs/quickjs-runtime/src/lib/runtime.spec.ts`; rebaseline gas expectations from the ABI path.
+- [x] Remove legacy exports from the wasm harness: drop `qjs_eval`/`qjs_free_output` from `libs/quickjs-wasm-build/src/wasm/quickjs_wasm.c` and from the exported symbols list in `libs/quickjs-wasm-build/scripts/build-wasm.sh`; update `libs/quickjs-wasm-build/README.md` to describe only the deterministic ABI entrypoints.
+- [x] Consolidate documentation: migrate any persistent artifact path/metadata notes from `docs/wasm-gas-harness.md` into the appropriate canonical doc (`docs/toolchain.md` or this plan’s P4 state) and remove `docs/wasm-gas-harness.md` plus its reference in this file.
 
 **Acceptance criteria:**
 
-- [ ] No tests or harnesses call `qjs_eval` or parse the legacy `RESULT|ERROR … GAS …` format; ABI/DV-based entrypoints are used instead.
-- [ ] Wasm build outputs expose only the deterministic ABI exports, and README/build scripts match.
-- [ ] `docs/wasm-gas-harness.md` is deleted and any needed stable details live in existing canonical docs.
+- [x] No tests or harnesses call `qjs_eval` or parse the legacy `RESULT|ERROR … GAS …` format; ABI/DV-based entrypoints are used instead.
+- [x] Wasm build outputs expose only the deterministic ABI exports, and README/build scripts match.
+- [x] `docs/wasm-gas-harness.md` is deleted and any needed stable details live in existing canonical docs.
+
+**Current state (P8 T-090):**
+
+- `libs/quickjs-wasm-build` exports only deterministic ABI entrypoints; qjs*eval/qjs_free_output were removed from the C harness and build script, and the README now documents qjs_det*\* usage and `_free` expectations.
+- Wasm-facing specs in `libs/test-harness`, `libs/quickjs-wasm`, and `libs/quickjs-runtime` drive `qjs_det_init`/`qjs_det_eval` with the Host.v1 manifest/context and assert DV payloads + gas numbers (wasm32 expectations are pinned; wasm64 compares to native).
+- Legacy notes from `docs/wasm-gas-harness.md` were folded into `docs/toolchain.md` and this plan; the legacy doc was deleted.
 
 ---
 

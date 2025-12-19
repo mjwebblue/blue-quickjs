@@ -18,12 +18,6 @@ describe('validateProgramArtifact', () => {
     abiVersion: 1,
     abiManifestHash: SAMPLE_HASH,
     engineBuildHash: SAMPLE_HASH,
-    runtimeFlags: {
-      debug: true,
-      variant: 'wasm32',
-      maxMemoryMb: 32,
-      note: 'stable',
-    },
   };
 
   it('accepts a well-formed program artifact', () => {
@@ -49,15 +43,6 @@ describe('validateProgramArtifact', () => {
     ).toThrow(RuntimeValidationError);
   });
 
-  it('rejects runtime flags with unsupported types', () => {
-    expect(() =>
-      validateProgramArtifact({
-        ...baseProgram,
-        runtimeFlags: { invalid: { nested: true } },
-      }),
-    ).toThrow(RuntimeValidationError);
-  });
-
   it('rejects null or empty engineBuildHash values', () => {
     expect(() =>
       validateProgramArtifact({
@@ -73,15 +58,6 @@ describe('validateProgramArtifact', () => {
       }),
     ).toThrow(RuntimeValidationError);
   });
-
-  it('rejects null runtimeFlags', () => {
-    expect(() =>
-      validateProgramArtifact({
-        ...baseProgram,
-        runtimeFlags: null as unknown as Record<string, never>,
-      }),
-    ).toThrow(RuntimeValidationError);
-  });
 });
 
 describe('validateInputEnvelope', () => {
@@ -89,25 +65,10 @@ describe('validateInputEnvelope', () => {
     event: { type: 'create', payload: { id: 1 } },
     eventCanonical: { type: 'create', payload: { id: 1 } },
     steps: [],
-    document: {
-      id: 'doc-1',
-      hash: SAMPLE_HASH,
-      epoch: 5,
-    },
-    hostContext: { requestId: 'abc' },
   };
 
   it('accepts a well-formed input envelope', () => {
     expect(validateInputEnvelope(baseInput)).toEqual(baseInput);
-  });
-
-  it('rejects envelopes without any document identity fields', () => {
-    expect(() =>
-      validateInputEnvelope({
-        ...baseInput,
-        document: {},
-      }),
-    ).toThrow(RuntimeValidationError);
   });
 
   it('rejects invalid DV fields with a wrapped error', () => {
@@ -132,11 +93,11 @@ describe('validateInputEnvelope', () => {
     ).toThrow(RuntimeValidationError);
   });
 
-  it('rejects document hashes that are not hex', () => {
+  it('rejects unknown fields', () => {
     expect(() =>
       validateInputEnvelope({
         ...baseInput,
-        document: { id: 'doc-1', hash: 'not-hex' },
+        extra: 123 as unknown as InputEnvelope['steps'],
       }),
     ).toThrow(RuntimeValidationError);
   });

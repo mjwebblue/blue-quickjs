@@ -171,6 +171,13 @@ importers:
       '@blue-quickjs/quickjs-wasm-build':
         specifier: workspace:*
         version: link:../quickjs-wasm-build
+    devDependencies:
+      '@blue-quickjs/dv':
+        specifier: workspace:*
+        version: link:../dv
+      '@blue-quickjs/test-harness':
+        specifier: workspace:*
+        version: link:../test-harness
 
   libs/quickjs-wasm-build:
     dependencies:

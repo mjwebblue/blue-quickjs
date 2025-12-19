@@ -99,13 +99,6 @@ static char *format_with_gas(const char *kind, const char *payload, uint64_t gas
                     gas_used(gas_limit, gas_remaining));
 }
 
-static int read_gas_trace(JSContext *ctx, JSGasTrace *trace) {
-  if (!trace) {
-    return 0;
-  }
-  return JS_ReadGasTrace(ctx, trace) == 0;
-}
-
 static char *format_exception(JSContext *ctx, uint64_t gas_limit, const char *fallback,
                               const JSGasTrace *trace) {
   JSValue exception = JS_GetException(ctx);
@@ -445,101 +438,4 @@ char *qjs_det_read_trace(void)
       trace.builtin_array_cb_base_gas, trace.builtin_array_cb_per_element_count,
       trace.builtin_array_cb_per_element_gas, trace.allocation_count,
       trace.allocation_bytes, trace.allocation_gas);
-}
-
-EMSCRIPTEN_KEEPALIVE
-char *qjs_eval(const char *code, uint64_t gas_limit) {
-  JSRuntime *rt = NULL;
-  JSContext *ctx = NULL;
-  char *output = NULL;
-  JSGasTrace trace = {0};
-  int trace_enabled = 0;
-
-  if (JS_NewDeterministicRuntime(&rt, &ctx) != 0) {
-    return dup_printf("ERROR <init> GAS remaining=0 used=0");
-  }
-
-  JS_SetGasLimit(ctx, gas_limit);
-  trace_enabled = (JS_EnableGasTrace(ctx, 1) == 0);
-
-  if (run_gc_checkpoint(ctx) != 0) {
-    const JSGasTrace *trace_ptr =
-        trace_enabled && read_gas_trace(ctx, &trace) ? &trace : NULL;
-    output = format_exception(ctx, gas_limit, "<gc checkpoint>", trace_ptr);
-    goto cleanup;
-  }
-
-  JSValue result = JS_Eval(ctx, code, strlen(code), "<eval>", JS_EVAL_TYPE_GLOBAL);
-  if (JS_IsException(result)) {
-    JS_FreeValue(ctx, result);
-    if (run_gc_checkpoint(ctx) != 0) {
-      const JSGasTrace *trace_ptr =
-          trace_enabled && read_gas_trace(ctx, &trace) ? &trace : NULL;
-      output = format_exception(ctx, gas_limit, "<gc checkpoint>", trace_ptr);
-      goto cleanup;
-    }
-    const JSGasTrace *trace_ptr = trace_enabled && read_gas_trace(ctx, &trace) ? &trace : NULL;
-    output = format_exception(ctx, gas_limit, "<exception>", trace_ptr);
-    goto cleanup;
-  }
-
-  JSValue json = JS_JSONStringify(ctx, result, JS_UNDEFINED, JS_UNDEFINED);
-  JS_FreeValue(ctx, result);
-
-  if (JS_IsException(json)) {
-    if (run_gc_checkpoint(ctx) != 0) {
-      const JSGasTrace *trace_ptr =
-          trace_enabled && read_gas_trace(ctx, &trace) ? &trace : NULL;
-      output = format_exception(ctx, gas_limit, "<gc checkpoint>", trace_ptr);
-      goto cleanup;
-    }
-    const JSGasTrace *trace_ptr = trace_enabled && read_gas_trace(ctx, &trace) ? &trace : NULL;
-    output = format_exception(ctx, gas_limit, "<stringify>", trace_ptr);
-    JS_FreeValue(ctx, json);
-    goto cleanup;
-  }
-
-  const char *json_str = JS_ToCString(ctx, json);
-  if (!json_str) {
-    uint64_t remaining = JS_GetGasRemaining(ctx);
-    const JSGasTrace *trace_ptr = trace_enabled && read_gas_trace(ctx, &trace) ? &trace : NULL;
-    output = format_with_gas("ERROR", "<stringify>", gas_limit, remaining, trace_ptr);
-    JS_FreeValue(ctx, json);
-    goto cleanup;
-  }
-
-  if (run_gc_checkpoint(ctx) != 0) {
-    const JSGasTrace *trace_ptr =
-        trace_enabled && read_gas_trace(ctx, &trace) ? &trace : NULL;
-    output = format_exception(ctx, gas_limit, "<gc checkpoint>", trace_ptr);
-    JS_FreeCString(ctx, json_str);
-    JS_FreeValue(ctx, json);
-    goto cleanup;
-  }
-
-  uint64_t remaining = JS_GetGasRemaining(ctx);
-  const JSGasTrace *trace_ptr = trace_enabled && read_gas_trace(ctx, &trace) ? &trace : NULL;
-  output = format_with_gas("RESULT", json_str, gas_limit, remaining, trace_ptr);
-
-  JS_FreeCString(ctx, json_str);
-  JS_FreeValue(ctx, json);
-
-cleanup:
-  if (ctx) {
-    JS_FreeContext(ctx);
-  }
-  if (rt) {
-    JS_FreeRuntime(rt);
-  }
-  if (!output) {
-    return dup_printf("ERROR <internal> GAS remaining=0 used=0");
-  }
-  return output;
-}
-
-EMSCRIPTEN_KEEPALIVE
-void qjs_free_output(char *ptr) {
-  if (ptr) {
-    free(ptr);
-  }
 }

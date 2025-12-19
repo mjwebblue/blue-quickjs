@@ -27,7 +27,7 @@ const TAPE_CAPACITY = 32;
 describe('smoke-node determinism fixtures', () => {
   it('matches expected outputs for all fixtures', async () => {
     for (const fixture of DETERMINISM_FIXTURES) {
-      const host = fixture.createHost(fixture.input);
+      const host = fixture.createHost();
       const result = await evaluate({
         program: fixture.program,
         input: fixture.input,

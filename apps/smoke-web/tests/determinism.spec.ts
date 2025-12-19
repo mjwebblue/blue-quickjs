@@ -75,7 +75,7 @@ async function runNodeFixtures(): Promise<FixtureResult[]> {
 
   const results: FixtureResult[] = [];
   for (const fixture of DETERMINISM_FIXTURES) {
-    const host = fixture.createHost(fixture.input);
+    const host = fixture.createHost();
     const result = await evaluate({
       program: fixture.program,
       input: fixture.input,

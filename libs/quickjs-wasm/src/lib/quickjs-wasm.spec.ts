@@ -5,35 +5,37 @@ import {
   loadQuickjsWasmLoaderSource,
   loadQuickjsWasmMetadata,
 } from './quickjs-wasm.js';
+import { decodeDv, encodeDv } from '@blue-quickjs/dv';
+import {
+  DETERMINISM_INPUT,
+  HOST_V1_BYTES,
+  HOST_V1_HASH,
+  hexToBytes,
+  parseDeterministicOutput,
+} from '@blue-quickjs/test-harness';
+import {
+  type WasmModuleWithCwrap,
+  readCString,
+  writeBytes,
+  writeCString,
+  type WasmPtr,
+} from '@blue-quickjs/test-harness';
 
 const WASM_MAGIC_HEADER = [0x00, 0x61, 0x73, 0x6d];
 const HOST_TRANSPORT_SENTINEL = 0xffffffff >>> 0;
+const CONTEXT_BLOB = encodeDv({
+  event: DETERMINISM_INPUT.event,
+  eventCanonical: DETERMINISM_INPUT.eventCanonical,
+  steps: DETERMINISM_INPUT.steps,
+});
 
 type HarnessResultKind = 'RESULT' | 'ERROR';
 
 interface HarnessResult {
   kind: HarnessResultKind;
-  message: string;
-  gasRemaining: number;
-  gasUsed: number;
-}
-
-function parseHarnessOutput(output: string): HarnessResult {
-  const trimmed = output.trim();
-  const match =
-    /^(RESULT|ERROR)\s+(.*?)\s+GAS\s+remaining=(\d+)\s+used=(\d+)/.exec(
-      trimmed,
-    );
-  if (!match) {
-    throw new Error(`Unable to parse harness output: ${trimmed}`);
-  }
-  const [, kind, message, remaining, used] = match;
-  return {
-    kind: kind as HarnessResultKind,
-    message,
-    gasRemaining: Number(remaining),
-    gasUsed: Number(used),
-  };
+  payload: string;
+  gasRemaining: bigint;
+  gasUsed: bigint;
 }
 
 describe('quickjs wasm artifacts', () => {
@@ -101,37 +103,134 @@ describe('quickjs wasm artifacts', () => {
           host_call: () => HOST_TRANSPORT_SENTINEL,
         },
       });
-      const ptrReturnType = variant === 'wasm64' ? 'bigint' : 'number';
-      const ptrArgType = variant === 'wasm64' ? 'bigint' : 'number';
-      const evalFn = module.cwrap('qjs_eval', ptrReturnType, [
-        'string',
-        'bigint',
-      ]);
-      const freeFn = module.cwrap('qjs_free_output', null, [ptrArgType]);
-      const ptr = evalFn('1 + 2', BigInt(500));
-      const ptrNumber =
-        typeof ptr === 'bigint'
-          ? Number(ptr <= BigInt(Number.MAX_SAFE_INTEGER) ? ptr : BigInt(0))
-          : ptr;
-      if (typeof ptr === 'bigint' && ptr > BigInt(Number.MAX_SAFE_INTEGER)) {
-        throw new Error('Pointer exceeds JS safe integer range');
-      }
-      const raw = module.UTF8ToString(ptrNumber);
-      freeFn(ptr);
+      const { init, evalFn, freeRuntime, malloc, free, readCString } =
+        createDeterministicFns(module, variant);
 
-      const parsed = parseHarnessOutput(raw);
-      expect(parsed.kind).toBe('RESULT');
-      expect(parsed.message).toBe('3');
-
-      const baseline = baselineByVariant.get(variant);
-      if (baseline) {
-        expect(parsed.message).toBe(baseline.message);
-        expect(parsed.kind).toBe(baseline.kind);
-        expect(parsed.gasRemaining).toBe(baseline.gasRemaining);
-        expect(parsed.gasUsed).toBe(baseline.gasUsed);
+      const manifestPtr = writeBytes(module, malloc, HOST_V1_BYTES);
+      const contextPtr =
+        CONTEXT_BLOB.length > 0 ? writeBytes(module, malloc, CONTEXT_BLOB) : 0;
+      const hashPtr = writeCStringWithVariant(
+        HOST_V1_HASH,
+        malloc,
+        module,
+        variant,
+      );
+      if (typeof manifestPtr === 'number') {
+        new Uint8Array(
+          module.HEAPU8.buffer,
+          manifestPtr,
+          HOST_V1_BYTES.length,
+        ).set(HOST_V1_BYTES);
       } else {
-        baselineByVariant.set(variant, parsed);
+        new Uint8Array(
+          module.HEAPU8.buffer,
+          Number(manifestPtr),
+          HOST_V1_BYTES.length,
+        ).set(HOST_V1_BYTES);
+      }
+      if (contextPtr) {
+        if (typeof contextPtr === 'number') {
+          new Uint8Array(
+            module.HEAPU8.buffer,
+            contextPtr,
+            CONTEXT_BLOB.length,
+          ).set(CONTEXT_BLOB);
+        } else {
+          new Uint8Array(
+            module.HEAPU8.buffer,
+            Number(contextPtr),
+            CONTEXT_BLOB.length,
+          ).set(CONTEXT_BLOB);
+        }
+      }
+
+      try {
+        const errorPtr = init(
+          manifestPtr,
+          HOST_V1_BYTES.length,
+          hashPtr,
+          contextPtr,
+          CONTEXT_BLOB.length,
+          500n,
+        );
+        if (errorPtr !== 0) {
+          const message = readCString(errorPtr);
+          free(errorPtr);
+          throw new Error(`init failed: ${message}`);
+        }
+
+        const resultPtr = evalFn('1 + 2');
+        const parsed = parseDeterministicOutput(readCString(resultPtr));
+        free(resultPtr);
+
+        expect(parsed.kind).toBe('RESULT');
+        expect(decodeDv(hexToBytes(parsed.payload))).toBe(3);
+
+        const baseline = baselineByVariant.get(variant);
+        if (baseline) {
+          expect(parsed.payload).toBe(baseline.payload);
+          expect(parsed.kind).toBe(baseline.kind);
+          expect(parsed.gasRemaining).toBe(baseline.gasRemaining);
+          expect(parsed.gasUsed).toBe(baseline.gasUsed);
+        } else {
+          baselineByVariant.set(variant, parsed);
+        }
+      } finally {
+        free(manifestPtr);
+        free(hashPtr);
+        if (contextPtr) {
+          free(contextPtr);
+        }
+        freeRuntime();
       }
     }
   });
 });
+
+function createDeterministicFns(module: WasmModuleWithCwrap, variant: string) {
+  const ptrType = variant === 'wasm64' ? 'bigint' : 'number';
+  const init = module.cwrap('qjs_det_init', ptrType, [
+    ptrType,
+    'number',
+    ptrType,
+    ptrType,
+    'number',
+    'bigint',
+  ]) as (
+    manifestPtr: WasmPtr,
+    manifestSize: number,
+    hashPtr: WasmPtr,
+    contextPtr: WasmPtr,
+    contextSize: number,
+    gasLimit: bigint,
+  ) => WasmPtr;
+  const evalFn = module.cwrap('qjs_det_eval', ptrType, ['string']) as (
+    code: string,
+  ) => WasmPtr;
+  const freeRuntime = module.cwrap('qjs_det_free', null, []) as () => void;
+  const malloc = module.cwrap('malloc', ptrType, ['number']) as (
+    size: number,
+  ) => WasmPtr;
+  const free = module.cwrap('free', null, [ptrType]) as (ptr: WasmPtr) => void;
+
+  const readCStringBound = (ptr: WasmPtr) => readCString(module, ptr);
+
+  return {
+    init,
+    evalFn,
+    freeRuntime,
+    malloc,
+    free,
+    readCString: readCStringBound,
+  };
+}
+
+function writeCStringWithVariant(
+  value: string,
+  malloc: (size: number) => WasmPtr,
+  module: WasmModuleWithCwrap,
+  variant: string,
+): WasmPtr {
+  const ptr = writeCString(module, malloc, value);
+  return variant === 'wasm64' ? BigInt(ptr) : ptr;
+}
